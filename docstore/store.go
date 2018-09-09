@@ -2,6 +2,7 @@ package docstore
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/aefalcon-redux/github-keystore-protobuf/go/appkeypb"
@@ -175,7 +176,7 @@ func (s *AppKeyStore) DeleteKeyMetaDoc(appId uint64, fingerprint string) (*Cache
 	return s.DocStore.DeleteDocument(docName)
 }
 
-func (s *AppKeyStore) AddApp(req *appkeypb.AddAppRequest) (*appkeypb.AddAppResponse, error) {
+func (s *AppKeyStore) AddApp(req *appkeypb.AddAppRequest, logger *log.Logger) (*appkeypb.AddAppResponse, error) {
 	index, _, err := s.GetAppIndexDoc()
 	if err != nil {
 		return nil, err
@@ -201,4 +202,56 @@ func (s *AppKeyStore) AddApp(req *appkeypb.AddAppRequest) (*appkeypb.AddAppRespo
 		return nil, err
 	}
 	return &appkeypb.AddAppResponse{}, nil
+}
+
+func (s *AppKeyStore) RemoveApp(req *appkeypb.RemoveAppRequest, logger *log.Logger) (*appkeypb.RemoveAppResponse, error) {
+	index, _, err := s.GetAppIndexDoc()
+	if err != nil {
+		return nil, err
+	}
+	if _, found := index.AppRefs[req.App]; !found {
+		logger.Printf("Application %d not in index", req.App)
+	} else {
+		delete(index.AppRefs, req.App)
+		_, err = s.PutAppIndexDoc(index)
+		if err != nil {
+			logger.Fatalf("Failed to put updated application index")
+			return nil, err
+		}
+		logger.Printf("Application %d removed from index", req.App)
+	}
+	app, _, err := s.GetAppDoc(req.App)
+	if err != nil {
+		logger.Printf("Failed to get app %d: %s", req.App, err)
+		return nil, err
+	}
+	_, err = s.DeleteAppDoc(req.App)
+	if err != nil {
+		logger.Printf("Failed to remove app document for %d: %s", req.App, err)
+		return nil, err
+	}
+	logger.Printf("Deleted application %d", req.App)
+	removeKeysOk := true
+	for _, key := range app.Keys {
+		_, err = s.DeleteKeyMetaDoc(req.App, key.Meta.Fingerprint)
+		if err != nil {
+			logger.Printf("Failed to remove key %s metadata", key.Meta.Fingerprint)
+			removeKeysOk = false
+		} else {
+			logger.Printf("Deleted key %s metadata", key.Meta.Fingerprint)
+		}
+		_, err = s.DeleteKeyDoc(req.App, key.Meta.Fingerprint)
+		if err != nil {
+			logger.Printf("Failed to remove key %s", key.Meta.Fingerprint)
+			removeKeysOk = false
+		} else {
+			logger.Printf("Deleted key %s", key.Meta.Fingerprint)
+		}
+	}
+	if !removeKeysOk {
+		return nil, fmt.Errorf("Failed to remove keys")
+	} else {
+		logger.Printf("Deleted all keys")
+	}
+	return &appkeypb.RemoveAppResponse{}, nil
 }

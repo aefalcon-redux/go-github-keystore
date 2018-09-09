@@ -113,15 +113,15 @@ func MakeStore(config *appkeypb.AppKeyManagerConfig, links *appkeypb.Links) (*do
 	return &store, nil
 }
 
-func GetConfig(flags *flagValues) (*appkeypb.AppKeyManagerConfig, error) {
+func GetConfig(flags *flagValues, logger *log.Logger) (*appkeypb.AppKeyManagerConfig, error) {
 	configPath, err := expandPath(flags.ConfigPath)
 	if err != nil {
-		log.Printf("Unable to expand path %s: %s", flags.ConfigPath, err)
+		logger.Printf("Unable to expand path %s: %s", flags.ConfigPath, err)
 		return nil, err
 	}
 	configFile, err := os.Open(configPath)
 	if err != nil {
-		log.Printf("Unable to open configuration file %s: %s", configPath, err)
+		logger.Printf("Unable to open configuration file %s: %s", configPath, err)
 		return nil, err
 	}
 	defer configFile.Close()
@@ -129,7 +129,7 @@ func GetConfig(flags *flagValues) (*appkeypb.AppKeyManagerConfig, error) {
 	unmarshaler := jsonpb.Unmarshaler{}
 	err = unmarshaler.Unmarshal(configFile, &config)
 	if err != nil {
-		log.Printf("Unable to unmarshal confguration: %s", err)
+		logger.Printf("Unable to unmarshal confguration: %s", err)
 		return nil, err
 	}
 	return &config, nil
@@ -159,25 +159,25 @@ func (v *flagValues) ValidateDecimal(flag, text string) error {
 	return nil
 }
 
-type CmdFunc func(flagValues *flagValues)
+type CmdFunc func(flagValues *flagValues, logger *log.Logger)
 
-func cmdInitDb(flagValues *flagValues) {
-	config, err := GetConfig(flagValues)
+func cmdInitDb(flagValues *flagValues, logger *log.Logger) {
+	config, err := GetConfig(flagValues, logger)
 	if err != nil {
-		log.Fatalf("Failed to get configuration: %s", err)
+		logger.Fatalf("Failed to get configuration: %s", err)
 	}
 	store, err := MakeStore(config, nil)
 	if err != nil {
-		log.Fatalf("Failed to make store: %s", err)
+		logger.Fatalf("Failed to make store: %s", err)
 	}
 	var index appkeypb.AppIndex
 	_, err = store.PutAppIndexDoc(&index)
 	if err != nil {
-		log.Fatalf("Failed to put application index")
+		logger.Fatalf("Failed to put application index")
 	}
 }
 
-func cmdInitConfig(flagValues *flagValues) {
+func cmdInitConfig(flagValues *flagValues, logger *log.Logger) {
 	config := appkeypb.AppKeyManagerConfig{
 		DbLoc: &appkeypb.Location{},
 	}
@@ -196,103 +196,103 @@ func cmdInitConfig(flagValues *flagValues) {
 	}
 	configPath, err := expandPath(flagValues.ConfigPath)
 	if err != nil {
-		log.Fatalf("Unable to expand path %s: %s", flagValues.ConfigPath, err)
+		logger.Fatalf("Unable to expand path %s: %s", flagValues.ConfigPath, err)
 	}
 	configDir := filepath.Dir(configPath)
 	err = os.MkdirAll(configDir, 0750)
 	if err != nil {
-		log.Fatalf("Unable to create directory %s: %s", configDir, err)
+		logger.Fatalf("Unable to create directory %s: %s", configDir, err)
 	}
 	configFile, err := os.Create(configPath)
 	defer configFile.Close()
 	if err != nil {
-		log.Fatalf("Unable to create configuration file %s: %s", configPath, err)
+		logger.Fatalf("Unable to create configuration file %s: %s", configPath, err)
 	}
 	marshaler := jsonpb.Marshaler{
 		Indent: "   ",
 	}
 	err = marshaler.Marshal(configFile, &config)
 	if err != nil {
-		log.Fatalf("Unable to marshal configuration: %s", err)
+		logger.Fatalf("Unable to marshal configuration: %s", err)
 	}
 	_, err = configFile.Write([]byte("\n"))
 	if err != nil {
-		log.Fatalf("Unable to write to configuration file: %s", err)
+		logger.Fatalf("Unable to write to configuration file: %s", err)
 	}
 }
 
-func cmdListApps(flagValues *flagValues) {
-	config, err := GetConfig(flagValues)
+func cmdListApps(flagValues *flagValues, logger *log.Logger) {
+	config, err := GetConfig(flagValues, logger)
 	if err != nil {
-		log.Fatalf("Failed to get configuration: %s", err)
+		logger.Fatalf("Failed to get configuration: %s", err)
 	}
 	store, err := MakeStore(config, nil)
 	if err != nil {
-		log.Fatalf("Failed to make store: %s", err)
+		logger.Fatalf("Failed to make store: %s", err)
 	}
 	index, _, err := store.GetAppIndexDoc()
 	if err != nil {
-		log.Fatalf("Failed to put application index")
+		logger.Fatalf("Failed to put application index")
 	}
 	if len(index.AppRefs) == 0 {
-		log.Printf("No apps")
+		logger.Printf("No apps")
 	} else {
 		for appId := range index.AppRefs {
-			log.Printf("app %d", appId)
+			logger.Printf("app %d", appId)
 		}
 	}
 }
 
-func cmdAddApp(flagValues *flagValues) {
-	config, err := GetConfig(flagValues)
+func cmdAddApp(flagValues *flagValues, logger *log.Logger) {
+	config, err := GetConfig(flagValues, logger)
 	if err != nil {
-		log.Fatalf("Failed to get configuration: %s", err)
+		logger.Fatalf("Failed to get configuration: %s", err)
 	}
 	store, err := MakeStore(config, nil)
 	if err != nil {
-		log.Fatalf("Failed to make store: %s", err)
+		logger.Fatalf("Failed to make store: %s", err)
 	}
 	req := appkeypb.AddAppRequest{
 		App: flagValues.App,
 	}
-	_, err = store.AddApp(&req)
+	_, err = store.AddApp(&req, logger)
 	if err != nil {
-		log.Fatalf("Failed to create application %d: %s", flagValues.App, err)
+		logger.Fatalf("Failed to create application %d: %s", flagValues.App, err)
 	}
 }
 
-func cmdAddKey(flagValues *flagValues) {
-	config, err := GetConfig(flagValues)
+func cmdAddKey(flagValues *flagValues, logger *log.Logger) {
+	config, err := GetConfig(flagValues, logger)
 	if err != nil {
-		log.Fatalf("Failed to get configuration: %s", err)
+		logger.Fatalf("Failed to get configuration: %s", err)
 	}
 	store, err := MakeStore(config, nil)
 	if err != nil {
-		log.Fatalf("Failed to make store: %s", err)
+		logger.Fatalf("Failed to make store: %s", err)
 	}
 	keyFile, err := os.Open(flagValues.KeyFile)
 	if err != nil {
-		log.Fatalf("Failed to open key file %s", flagValues.KeyFile)
+		logger.Fatalf("Failed to open key file %s", flagValues.KeyFile)
 	}
 	keyBytes, err := ioutil.ReadAll(keyFile)
 	if err != nil {
-		log.Fatalf("Failed to read key file %s: %s", flagValues.KeyFile, err)
+		logger.Fatalf("Failed to read key file %s: %s", flagValues.KeyFile, err)
 	}
 	key, err := ParsePrivateKey(keyBytes)
 	if err != nil {
-		log.Fatalf("Failed to parse private key %s: %s", flagValues.KeyFile, err)
+		logger.Fatalf("Failed to parse private key %s: %s", flagValues.KeyFile, err)
 	}
 	fingerprint, err := KeyFingerprint(key)
 	if err != nil {
-		log.Fatalf("Failed to calculate key fingerprint: %s", err)
+		logger.Fatalf("Failed to calculate key fingerprint: %s", err)
 	}
-	log.Printf("Key has fingerprint %s", fingerprint)
+	logger.Printf("Key has fingerprint %s", fingerprint)
 	app, _, err := store.GetAppDoc(flagValues.App)
 	if err != nil {
-		log.Fatalf("Failed to get app %d: %s", flagValues.App, err)
+		logger.Fatalf("Failed to get app %d: %s", flagValues.App, err)
 	}
 	if _, found := app.Keys[fingerprint]; found {
-		log.Fatalf("App %d already has key %s", flagValues.App, fingerprint)
+		logger.Fatalf("App %d already has key %s", flagValues.App, fingerprint)
 	}
 	keyMeta := &appkeypb.AppKeyMeta{
 		Fingerprint: fingerprint,
@@ -306,126 +306,88 @@ func cmdAddKey(flagValues *flagValues) {
 	}
 	_, err = store.PutKeyDoc(flagValues.App, fingerprint, keyBytes)
 	if err != nil {
-		log.Fatalf("Failed to put key document: %s", err)
+		logger.Fatalf("Failed to put key document: %s", err)
 	}
 	_, err = store.PutKeyMetaDoc(keyMeta)
 	if err != nil {
-		log.Fatalf("Failed to put key metadata document: %s", err)
+		logger.Fatalf("Failed to put key metadata document: %s", err)
 	}
 	_, err = store.PutAppDoc(app)
 	if err != nil {
-		log.Fatalf("Failed to update application document: %s", err)
+		logger.Fatalf("Failed to update application document: %s", err)
 	}
 }
 
-func cmdListKeys(flagValues *flagValues) {
-	config, err := GetConfig(flagValues)
+func cmdListKeys(flagValues *flagValues, logger *log.Logger) {
+	config, err := GetConfig(flagValues, logger)
 	if err != nil {
-		log.Fatalf("Failed to get configuration: %s", err)
+		logger.Fatalf("Failed to get configuration: %s", err)
 	}
 	store, err := MakeStore(config, nil)
 	if err != nil {
-		log.Fatalf("Failed to make store: %s", err)
+		logger.Fatalf("Failed to make store: %s", err)
 	}
 	app, _, err := store.GetAppDoc(flagValues.App)
 	if err != nil {
-		log.Fatalf("Failed to get app %d: %s", flagValues.App, err)
+		logger.Fatalf("Failed to get app %d: %s", flagValues.App, err)
 	}
 	if len(app.Keys) == 0 {
-		log.Printf("App has no keys")
+		logger.Printf("App has no keys")
 		return
 	}
 	for _, key := range app.Keys {
-		log.Printf("key %s", key.Meta.Fingerprint)
+		logger.Printf("key %s", key.Meta.Fingerprint)
 	}
 }
 
-func cmdRemoveKey(flagValues *flagValues) {
-	config, err := GetConfig(flagValues)
+func cmdRemoveKey(flagValues *flagValues, logger *log.Logger) {
+	config, err := GetConfig(flagValues, logger)
 	if err != nil {
-		log.Fatalf("Failed to get configuration: %s", err)
+		logger.Fatalf("Failed to get configuration: %s", err)
 	}
 	store, err := MakeStore(config, nil)
 	if err != nil {
-		log.Fatalf("Failed to make store: %s", err)
+		logger.Fatalf("Failed to make store: %s", err)
 	}
 	app, _, err := store.GetAppDoc(flagValues.App)
 	if err != nil {
-		log.Fatalf("Failed to get app %d: %s", flagValues.App, err)
+		logger.Fatalf("Failed to get app %d: %s", flagValues.App, err)
 	}
 	if _, found := app.Keys[flagValues.Key]; !found {
-		log.Fatalf("App %d does not have  key %s", flagValues.App, flagValues.Key)
+		logger.Fatalf("App %d does not have  key %s", flagValues.App, flagValues.Key)
 	}
 	delete(app.Keys, flagValues.Key)
 	_, err = store.DeleteKeyDoc(flagValues.App, flagValues.Key)
 	if err != nil {
-		log.Fatalf("Failed delete key %s: %s", flagValues.Key, err)
+		logger.Fatalf("Failed delete key %s: %s", flagValues.Key, err)
 	}
 	_, err = store.DeleteKeyMetaDoc(flagValues.App, flagValues.Key)
 	if err != nil {
-		log.Fatalf("Failed delete key %s metadata: %s", flagValues.Key, err)
+		logger.Fatalf("Failed delete key %s metadata: %s", flagValues.Key, err)
 	}
 	_, err = store.PutAppDoc(app)
 	if err != nil {
-		log.Fatalf("Failed to update application document: %s", err)
+		logger.Fatalf("Failed to update application document: %s", err)
 	}
 }
 
-func cmdRemoveApp(flagValues *flagValues) {
-	config, err := GetConfig(flagValues)
+func cmdRemoveApp(flagValues *flagValues, logger *log.Logger) {
+	config, err := GetConfig(flagValues, logger)
 	if err != nil {
-		log.Fatalf("Failed to get configuration: %s", err)
+		logger.Fatalf("Failed to get configuration: %s", err)
 	}
 	store, err := MakeStore(config, nil)
 	if err != nil {
-		log.Fatalf("Failed to make store: %s", err)
+		logger.Fatalf("Failed to make store: %s", err)
 	}
-	log.Printf("Removing application %d", flagValues.App)
-	index, _, err := store.GetAppIndexDoc()
+	req := appkeypb.RemoveAppRequest{
+		App: flagValues.App,
+	}
+	_, err = store.RemoveApp(&req, logger)
 	if err != nil {
-		log.Fatalf("Failed to get application index")
+		logger.Fatalf("Failed to remove application %d", flagValues.App)
 	}
-	if _, found := index.AppRefs[flagValues.App]; !found {
-		log.Printf("Application %d not in index", flagValues.App)
-	} else {
-		delete(index.AppRefs, flagValues.App)
-		_, err = store.PutAppIndexDoc(index)
-		if err != nil {
-			log.Fatalf("Failed to put updated application index")
-		}
-		log.Printf("Application %d removed from index", flagValues.App)
-	}
-	app, _, err := store.GetAppDoc(flagValues.App)
-	if err != nil {
-		log.Fatalf("Failed to get app %d: %s", flagValues.App, err)
-	}
-	_, err = store.DeleteAppDoc(flagValues.App)
-	if err != nil {
-		log.Fatalf("Failed to remove app document for %d: %s", flagValues.App, err)
-	}
-	log.Printf("Deleted application %d", flagValues.App)
-	removeKeysOk := true
-	for _, key := range app.Keys {
-		_, err = store.DeleteKeyMetaDoc(flagValues.App, key.Meta.Fingerprint)
-		if err != nil {
-			log.Printf("Failed to remove key %s metadata", key.Meta.Fingerprint)
-			removeKeysOk = false
-		} else {
-			log.Printf("Deleted key %s metadata", key.Meta.Fingerprint)
-		}
-		_, err = store.DeleteKeyDoc(flagValues.App, key.Meta.Fingerprint)
-		if err != nil {
-			log.Printf("Failed to remove key %s", key.Meta.Fingerprint)
-			removeKeysOk = false
-		} else {
-			log.Printf("Deleted key %s", key.Meta.Fingerprint)
-		}
-	}
-	if !removeKeysOk {
-		log.Fatal("Failed to remove keys")
-	} else {
-		log.Printf("Deleted all keys")
-	}
+	logger.Printf("Applicatoin %d removed", flagValues.App)
 }
 
 func ParsePrivateKey(key []byte) (*rsa.PrivateKey, error) {
@@ -462,7 +424,7 @@ type CmdSpec struct {
 	Flags         *flag.FlagSet
 	RequiredFlags []string
 	CheckFlags    func(flagValues *flagValues) error
-	CmdFunc       func(flagValues *flagValues)
+	CmdFunc       func(flagValues *flagValues, logger *log.Logger)
 }
 
 func SetupFlags(flags *flagValues) map[string]CmdSpec {
@@ -563,6 +525,7 @@ func main() {
 		cmdSpec.Flags.PrintDefaults()
 		os.Exit(2)
 	}
-	log.Printf("Using configuration file %s", flagValues.ConfigPath)
-	cmdSpec.CmdFunc(&flagValues)
+	logger := log.New(os.Stderr, "", log.Ltime)
+	logger.Printf("Using configuration file %s", flagValues.ConfigPath)
+	cmdSpec.CmdFunc(&flagValues, logger)
 }
