@@ -252,29 +252,12 @@ func cmdAddApp(flagValues *flagValues) {
 	if err != nil {
 		log.Fatalf("Failed to make store: %s", err)
 	}
-	index, _, err := store.GetAppIndexDoc()
+	req := appkeypb.AddAppRequest{
+		App: flagValues.App,
+	}
+	_, err = store.AddApp(&req)
 	if err != nil {
-		log.Fatalf("Failed to get application index")
-	}
-	if _, found := index.AppRefs[flagValues.App]; found {
-		log.Fatalf("Application %d already exists", flagValues.App)
-	}
-	if index.AppRefs == nil {
-		index.AppRefs = make(map[uint64]*appkeypb.AppIndexEntry)
-	}
-	index.AppRefs[flagValues.App] = &appkeypb.AppIndexEntry{
-		Id: flagValues.App,
-	}
-	app := appkeypb.App{
-		Id: flagValues.App,
-	}
-	_, err = store.PutAppDoc(&app)
-	if err != nil {
-		log.Fatalf("Failed to put application document: %s", err)
-	}
-	_, err = store.PutAppIndexDoc(index)
-	if err != nil {
-		log.Fatalf("Failed to put new application index: %s", err)
+		log.Fatalf("Failed to create application %d: %s", flagValues.App, err)
 	}
 }
 

@@ -22,6 +22,12 @@ func (e *UnsupportedLocation) Error() string {
 	return fmt.Sprintf("Ref type %T is not supported", (*appkeypb.Location)(e))
 }
 
+type AppExists uint64
+
+func (e AppExists) Error() string {
+	return fmt.Sprintf("app %d already exists", uint64(e))
+}
+
 type DocStore interface {
 	GetDocument(name string, pb proto.Message) (*CacheMeta, error)
 	GetDocumentRaw(name string) ([]byte, *CacheMeta, error)
@@ -167,4 +173,32 @@ func (s *AppKeyStore) DeleteKeyMetaDoc(appId uint64, fingerprint string) (*Cache
 		return nil, err
 	}
 	return s.DocStore.DeleteDocument(docName)
+}
+
+func (s *AppKeyStore) AddApp(req *appkeypb.AddAppRequest) (*appkeypb.AddAppResponse, error) {
+	index, _, err := s.GetAppIndexDoc()
+	if err != nil {
+		return nil, err
+	}
+	if _, found := index.AppRefs[req.App]; found {
+		return nil, AppExists(req.App)
+	}
+	if index.AppRefs == nil {
+		index.AppRefs = make(map[uint64]*appkeypb.AppIndexEntry)
+	}
+	index.AppRefs[req.App] = &appkeypb.AppIndexEntry{
+		Id: req.App,
+	}
+	app := appkeypb.App{
+		Id: req.App,
+	}
+	_, err = s.PutAppDoc(&app)
+	if err != nil {
+		return nil, err
+	}
+	_, err = s.PutAppIndexDoc(index)
+	if err != nil {
+		return nil, err
+	}
+	return &appkeypb.AddAppResponse{}, nil
 }
