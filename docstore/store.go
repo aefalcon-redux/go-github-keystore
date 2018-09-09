@@ -264,3 +264,12 @@ func (s *AppKeyStore) GetApp(req *appkeypb.GetAppRequest, logger *log.Logger) (*
 	}
 	return app, err
 }
+
+func (s *AppKeyStore) ListApps(req *appkeypb.ListAppsRequest, logger *log.Logger) (*appkeypb.AppIndex, error) {
+	index, _, err := s.GetAppIndexDoc()
+	if err != nil {
+		logger.Printf("Failed to get application index: %s", err)
+		return nil, err
+	}
+	return index, err
+}

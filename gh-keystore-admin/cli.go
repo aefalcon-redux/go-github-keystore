@@ -230,7 +230,11 @@ func cmdListApps(flagValues *flagValues, logger *log.Logger) {
 	if err != nil {
 		logger.Fatalf("Failed to make store: %s", err)
 	}
-	index, _, err := store.GetAppIndexDoc()
+	req := appkeypb.ListAppsRequest{}
+	index, err := store.ListApps(&req, logger)
+	if err != nil {
+		logger.Fatalf("Failed go get app index: %s", err)
+	}
 	if err != nil {
 		logger.Fatalf("Failed to put application index")
 	}
