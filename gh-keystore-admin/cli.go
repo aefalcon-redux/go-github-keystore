@@ -171,7 +171,7 @@ func cmdInitDb(flagValues *flagValues) {
 		log.Fatalf("Failed to make store: %s", err)
 	}
 	var index appkeypb.AppIndex
-	_, err = store.PutAppIndex(&index)
+	_, err = store.PutAppIndexDoc(&index)
 	if err != nil {
 		log.Fatalf("Failed to put application index")
 	}
@@ -230,7 +230,7 @@ func cmdListApps(flagValues *flagValues) {
 	if err != nil {
 		log.Fatalf("Failed to make store: %s", err)
 	}
-	index, _, err := store.GetAppIndex()
+	index, _, err := store.GetAppIndexDoc()
 	if err != nil {
 		log.Fatalf("Failed to put application index")
 	}
@@ -252,7 +252,7 @@ func cmdAddApp(flagValues *flagValues) {
 	if err != nil {
 		log.Fatalf("Failed to make store: %s", err)
 	}
-	index, _, err := store.GetAppIndex()
+	index, _, err := store.GetAppIndexDoc()
 	if err != nil {
 		log.Fatalf("Failed to get application index")
 	}
@@ -268,11 +268,11 @@ func cmdAddApp(flagValues *flagValues) {
 	app := appkeypb.App{
 		Id: flagValues.App,
 	}
-	_, err = store.PutApp(&app)
+	_, err = store.PutAppDoc(&app)
 	if err != nil {
 		log.Fatalf("Failed to put application document: %s", err)
 	}
-	_, err = store.PutAppIndex(index)
+	_, err = store.PutAppIndexDoc(index)
 	if err != nil {
 		log.Fatalf("Failed to put new application index: %s", err)
 	}
@@ -304,7 +304,7 @@ func cmdAddKey(flagValues *flagValues) {
 		log.Fatalf("Failed to calculate key fingerprint: %s", err)
 	}
 	log.Printf("Key has fingerprint %s", fingerprint)
-	app, _, err := store.GetApp(flagValues.App)
+	app, _, err := store.GetAppDoc(flagValues.App)
 	if err != nil {
 		log.Fatalf("Failed to get app %d: %s", flagValues.App, err)
 	}
@@ -321,15 +321,15 @@ func cmdAddKey(flagValues *flagValues) {
 	app.Keys[fingerprint] = &appkeypb.AppKeyIndexEntry{
 		Meta: keyMeta,
 	}
-	_, err = store.PutKey(flagValues.App, fingerprint, keyBytes)
+	_, err = store.PutKeyDoc(flagValues.App, fingerprint, keyBytes)
 	if err != nil {
 		log.Fatalf("Failed to put key document: %s", err)
 	}
-	_, err = store.PutKeyMeta(keyMeta)
+	_, err = store.PutKeyMetaDoc(keyMeta)
 	if err != nil {
 		log.Fatalf("Failed to put key metadata document: %s", err)
 	}
-	_, err = store.PutApp(app)
+	_, err = store.PutAppDoc(app)
 	if err != nil {
 		log.Fatalf("Failed to update application document: %s", err)
 	}
@@ -344,7 +344,7 @@ func cmdListKeys(flagValues *flagValues) {
 	if err != nil {
 		log.Fatalf("Failed to make store: %s", err)
 	}
-	app, _, err := store.GetApp(flagValues.App)
+	app, _, err := store.GetAppDoc(flagValues.App)
 	if err != nil {
 		log.Fatalf("Failed to get app %d: %s", flagValues.App, err)
 	}
@@ -366,7 +366,7 @@ func cmdRemoveKey(flagValues *flagValues) {
 	if err != nil {
 		log.Fatalf("Failed to make store: %s", err)
 	}
-	app, _, err := store.GetApp(flagValues.App)
+	app, _, err := store.GetAppDoc(flagValues.App)
 	if err != nil {
 		log.Fatalf("Failed to get app %d: %s", flagValues.App, err)
 	}
@@ -374,15 +374,15 @@ func cmdRemoveKey(flagValues *flagValues) {
 		log.Fatalf("App %d does not have  key %s", flagValues.App, flagValues.Key)
 	}
 	delete(app.Keys, flagValues.Key)
-	_, err = store.DeleteKey(flagValues.App, flagValues.Key)
+	_, err = store.DeleteKeyDoc(flagValues.App, flagValues.Key)
 	if err != nil {
 		log.Fatalf("Failed delete key %s: %s", flagValues.Key, err)
 	}
-	_, err = store.DeleteKeyMeta(flagValues.App, flagValues.Key)
+	_, err = store.DeleteKeyMetaDoc(flagValues.App, flagValues.Key)
 	if err != nil {
 		log.Fatalf("Failed delete key %s metadata: %s", flagValues.Key, err)
 	}
-	_, err = store.PutApp(app)
+	_, err = store.PutAppDoc(app)
 	if err != nil {
 		log.Fatalf("Failed to update application document: %s", err)
 	}
@@ -398,7 +398,7 @@ func cmdRemoveApp(flagValues *flagValues) {
 		log.Fatalf("Failed to make store: %s", err)
 	}
 	log.Printf("Removing application %d", flagValues.App)
-	index, _, err := store.GetAppIndex()
+	index, _, err := store.GetAppIndexDoc()
 	if err != nil {
 		log.Fatalf("Failed to get application index")
 	}
@@ -406,31 +406,31 @@ func cmdRemoveApp(flagValues *flagValues) {
 		log.Printf("Application %d not in index", flagValues.App)
 	} else {
 		delete(index.AppRefs, flagValues.App)
-		_, err = store.PutAppIndex(index)
+		_, err = store.PutAppIndexDoc(index)
 		if err != nil {
 			log.Fatalf("Failed to put updated application index")
 		}
 		log.Printf("Application %d removed from index", flagValues.App)
 	}
-	app, _, err := store.GetApp(flagValues.App)
+	app, _, err := store.GetAppDoc(flagValues.App)
 	if err != nil {
 		log.Fatalf("Failed to get app %d: %s", flagValues.App, err)
 	}
-	_, err = store.DeleteApp(flagValues.App)
+	_, err = store.DeleteAppDoc(flagValues.App)
 	if err != nil {
 		log.Fatalf("Failed to remove app document for %d: %s", flagValues.App, err)
 	}
 	log.Printf("Deleted application %d", flagValues.App)
 	removeKeysOk := true
 	for _, key := range app.Keys {
-		_, err = store.DeleteKeyMeta(flagValues.App, key.Meta.Fingerprint)
+		_, err = store.DeleteKeyMetaDoc(flagValues.App, key.Meta.Fingerprint)
 		if err != nil {
 			log.Printf("Failed to remove key %s metadata", key.Meta.Fingerprint)
 			removeKeysOk = false
 		} else {
 			log.Printf("Deleted key %s metadata", key.Meta.Fingerprint)
 		}
-		_, err = store.DeleteKey(flagValues.App, key.Meta.Fingerprint)
+		_, err = store.DeleteKeyDoc(flagValues.App, key.Meta.Fingerprint)
 		if err != nil {
 			log.Printf("Failed to remove key %s", key.Meta.Fingerprint)
 			removeKeysOk = false

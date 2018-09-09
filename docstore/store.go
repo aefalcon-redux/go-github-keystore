@@ -43,7 +43,7 @@ func (s *AppKeyStore) AppIndexName() (string, error) {
 	return uritmpl.Expand(map[string]interface{}{})
 }
 
-func (s *AppKeyStore) GetAppIndex() (*appkeypb.AppIndex, *CacheMeta, error) {
+func (s *AppKeyStore) GetAppIndexDoc() (*appkeypb.AppIndex, *CacheMeta, error) {
 	docName, err := s.AppIndexName()
 	if err != nil {
 		return nil, nil, err
@@ -53,7 +53,7 @@ func (s *AppKeyStore) GetAppIndex() (*appkeypb.AppIndex, *CacheMeta, error) {
 	return &index, meta, err
 }
 
-func (s *AppKeyStore) PutAppIndex(index *appkeypb.AppIndex) (*CacheMeta, error) {
+func (s *AppKeyStore) PutAppIndexDoc(index *appkeypb.AppIndex) (*CacheMeta, error) {
 	docName, err := s.AppIndexName()
 	if err != nil {
 		return nil, err
@@ -61,7 +61,7 @@ func (s *AppKeyStore) PutAppIndex(index *appkeypb.AppIndex) (*CacheMeta, error) 
 	return s.DocStore.PutDocument(docName, index)
 }
 
-func (s *AppKeyStore) DeleteAppIndex() (*CacheMeta, error) {
+func (s *AppKeyStore) DeleteAppIndexDoc() (*CacheMeta, error) {
 	docName, err := s.AppIndexName()
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (s *AppKeyStore) AppName(appId uint64) (string, error) {
 	return uritmpl.Expand(map[string]interface{}{"AppId": appId})
 }
 
-func (s *AppKeyStore) GetApp(appId uint64) (*appkeypb.App, *CacheMeta, error) {
+func (s *AppKeyStore) GetAppDoc(appId uint64) (*appkeypb.App, *CacheMeta, error) {
 	docName, err := s.AppName(appId)
 	if err != nil {
 		return nil, nil, err
@@ -87,7 +87,7 @@ func (s *AppKeyStore) GetApp(appId uint64) (*appkeypb.App, *CacheMeta, error) {
 	return &app, meta, err
 }
 
-func (s *AppKeyStore) PutApp(app *appkeypb.App) (*CacheMeta, error) {
+func (s *AppKeyStore) PutAppDoc(app *appkeypb.App) (*CacheMeta, error) {
 	docName, err := s.AppName(app.Id)
 	if err != nil {
 		return nil, err
@@ -95,7 +95,7 @@ func (s *AppKeyStore) PutApp(app *appkeypb.App) (*CacheMeta, error) {
 	return s.DocStore.PutDocument(docName, app)
 }
 
-func (s *AppKeyStore) DeleteApp(appId uint64) (*CacheMeta, error) {
+func (s *AppKeyStore) DeleteAppDoc(appId uint64) (*CacheMeta, error) {
 	docName, err := s.AppName(appId)
 	if err != nil {
 		return nil, err
@@ -111,7 +111,7 @@ func (s *AppKeyStore) KeyName(appId uint64, fingerprint string) (string, error) 
 	return uritmpl.Expand(map[string]interface{}{"AppId": appId, "Fingerprint": fingerprint})
 }
 
-func (s *AppKeyStore) GetKey(appId uint64, fingerprint string) ([]byte, *CacheMeta, error) {
+func (s *AppKeyStore) GetKeyDoc(appId uint64, fingerprint string) ([]byte, *CacheMeta, error) {
 	docName, err := s.KeyName(appId, fingerprint)
 	if err != nil {
 		return nil, nil, err
@@ -119,7 +119,7 @@ func (s *AppKeyStore) GetKey(appId uint64, fingerprint string) ([]byte, *CacheMe
 	return s.DocStore.GetDocumentRaw(docName)
 }
 
-func (s *AppKeyStore) PutKey(app uint64, fingerprint string, key []byte) (*CacheMeta, error) {
+func (s *AppKeyStore) PutKeyDoc(app uint64, fingerprint string, key []byte) (*CacheMeta, error) {
 	docName, err := s.KeyName(app, fingerprint)
 	if err != nil {
 		return nil, err
@@ -127,7 +127,7 @@ func (s *AppKeyStore) PutKey(app uint64, fingerprint string, key []byte) (*Cache
 	return s.DocStore.PutDocumentRaw(docName, key)
 }
 
-func (s *AppKeyStore) DeleteKey(appId uint64, fingerprint string) (*CacheMeta, error) {
+func (s *AppKeyStore) DeleteKeyDoc(appId uint64, fingerprint string) (*CacheMeta, error) {
 	docName, err := s.KeyName(appId, fingerprint)
 	if err != nil {
 		return nil, err
@@ -143,7 +143,7 @@ func (s *AppKeyStore) KeyMetaName(appId uint64, fingerprint string) (string, err
 	return uritmpl.Expand(map[string]interface{}{"AppId": appId, "Fingerprint": fingerprint})
 }
 
-func (s *AppKeyStore) GetKeyMeta(appId uint64, fingerprint string) (*appkeypb.AppKeyMeta, *CacheMeta, error) {
+func (s *AppKeyStore) GetKeyMetaDoc(appId uint64, fingerprint string) (*appkeypb.AppKeyMeta, *CacheMeta, error) {
 	docName, err := s.KeyMetaName(appId, fingerprint)
 	if err != nil {
 		return nil, nil, err
@@ -153,7 +153,7 @@ func (s *AppKeyStore) GetKeyMeta(appId uint64, fingerprint string) (*appkeypb.Ap
 	return &appMeta, cacheMeta, err
 }
 
-func (s *AppKeyStore) PutKeyMeta(keyMeta *appkeypb.AppKeyMeta) (*CacheMeta, error) {
+func (s *AppKeyStore) PutKeyMetaDoc(keyMeta *appkeypb.AppKeyMeta) (*CacheMeta, error) {
 	docName, err := s.KeyMetaName(keyMeta.App, keyMeta.Fingerprint)
 	if err != nil {
 		return nil, err
@@ -161,7 +161,7 @@ func (s *AppKeyStore) PutKeyMeta(keyMeta *appkeypb.AppKeyMeta) (*CacheMeta, erro
 	return s.DocStore.PutDocument(docName, keyMeta)
 }
 
-func (s *AppKeyStore) DeleteKeyMeta(appId uint64, fingerprint string) (*CacheMeta, error) {
+func (s *AppKeyStore) DeleteKeyMetaDoc(appId uint64, fingerprint string) (*CacheMeta, error) {
 	docName, err := s.KeyMetaName(appId, fingerprint)
 	if err != nil {
 		return nil, err
