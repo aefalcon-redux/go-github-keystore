@@ -273,3 +273,48 @@ func (s *AppKeyStore) ListApps(req *appkeypb.ListAppsRequest, logger *log.Logger
 	}
 	return index, err
 }
+
+func (s *AppKeyStore) AddKey(req *appkeypb.AddKeyRequest, logger *log.Logger) (*appkeypb.AddKeyResponse, error) {
+	if len(req.Keys) == 0 {
+		logger.Printf("No keys to add")
+		return &appkeypb.AddKeyResponse{}, nil
+	}
+	app, _, err := s.GetAppDoc(req.App)
+	if err != nil {
+		logger.Printf("Failed to get app %d: %s", req.App, err)
+		return nil, err
+	}
+	if len(app.Keys) == 0 {
+		app.Keys = make(map[string]*appkeypb.AppKeyIndexEntry)
+		for _, key := range req.Keys {
+			key.Meta.App = req.App
+			app.Keys[key.Meta.Fingerprint].Meta = key.Meta
+		}
+	} else {
+		for _, key := range req.Keys {
+			if _, found := app.Keys[key.Meta.Fingerprint]; found {
+				logger.Printf("App %d already has key %s", req.App, key.Meta.Fingerprint)
+			}
+			key.Meta.App = req.App
+			app.Keys[key.Meta.Fingerprint] = &appkeypb.AppKeyIndexEntry{
+				Meta: key.Meta,
+			}
+			_, err = s.PutKeyDoc(req.App, key.Meta.Fingerprint, key.Key)
+			if err != nil {
+				logger.Printf("Failed to put key document: %s", err)
+				return nil, err
+			}
+			_, err = s.PutKeyMetaDoc(key.Meta)
+			if err != nil {
+				logger.Printf("Failed to put key metadata document: %s", err)
+				return nil, err
+			}
+		}
+	}
+	_, err = s.PutAppDoc(app)
+	if err != nil {
+		logger.Printf("Failed to update application document: %s", err)
+		return nil, err
+	}
+	return &appkeypb.AddKeyResponse{}, nil
+}

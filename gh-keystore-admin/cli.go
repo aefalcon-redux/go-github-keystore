@@ -291,34 +291,21 @@ func cmdAddKey(flagValues *flagValues, logger *log.Logger) {
 		logger.Fatalf("Failed to calculate key fingerprint: %s", err)
 	}
 	logger.Printf("Key has fingerprint %s", fingerprint)
-	app, _, err := store.GetAppDoc(flagValues.App)
+	req := appkeypb.AddKeyRequest{
+		App: flagValues.App,
+		Keys: []*appkeypb.AppKey{
+			&appkeypb.AppKey{
+				Meta: &appkeypb.AppKeyMeta{
+					App:         flagValues.App,
+					Fingerprint: fingerprint,
+				},
+				Key: keyBytes,
+			},
+		},
+	}
+	_, err = store.AddKey(&req, logger)
 	if err != nil {
-		logger.Fatalf("Failed to get app %d: %s", flagValues.App, err)
-	}
-	if _, found := app.Keys[fingerprint]; found {
-		logger.Fatalf("App %d already has key %s", flagValues.App, fingerprint)
-	}
-	keyMeta := &appkeypb.AppKeyMeta{
-		Fingerprint: fingerprint,
-		App:         flagValues.App,
-	}
-	if app.Keys == nil {
-		app.Keys = make(map[string]*appkeypb.AppKeyIndexEntry)
-	}
-	app.Keys[fingerprint] = &appkeypb.AppKeyIndexEntry{
-		Meta: keyMeta,
-	}
-	_, err = store.PutKeyDoc(flagValues.App, fingerprint, keyBytes)
-	if err != nil {
-		logger.Fatalf("Failed to put key document: %s", err)
-	}
-	_, err = store.PutKeyMetaDoc(keyMeta)
-	if err != nil {
-		logger.Fatalf("Failed to put key metadata document: %s", err)
-	}
-	_, err = store.PutAppDoc(app)
-	if err != nil {
-		logger.Fatalf("Failed to update application document: %s", err)
+		logger.Fatalf("Failed to add key: %s", err)
 	}
 }
 
