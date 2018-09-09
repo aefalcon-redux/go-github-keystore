@@ -340,25 +340,13 @@ func cmdRemoveKey(flagValues *flagValues, logger *log.Logger) {
 	if err != nil {
 		logger.Fatalf("Failed to make store: %s", err)
 	}
-	app, _, err := store.GetAppDoc(flagValues.App)
-	if err != nil {
-		logger.Fatalf("Failed to get app %d: %s", flagValues.App, err)
+	req := appkeypb.RemoveKeyRequest{
+		App:          flagValues.App,
+		Fingerprints: []string{flagValues.Key},
 	}
-	if _, found := app.Keys[flagValues.Key]; !found {
-		logger.Fatalf("App %d does not have  key %s", flagValues.App, flagValues.Key)
-	}
-	delete(app.Keys, flagValues.Key)
-	_, err = store.DeleteKeyDoc(flagValues.App, flagValues.Key)
+	_, err = store.RemoveKey(&req, logger)
 	if err != nil {
-		logger.Fatalf("Failed delete key %s: %s", flagValues.Key, err)
-	}
-	_, err = store.DeleteKeyMetaDoc(flagValues.App, flagValues.Key)
-	if err != nil {
-		logger.Fatalf("Failed delete key %s metadata: %s", flagValues.Key, err)
-	}
-	_, err = store.PutAppDoc(app)
-	if err != nil {
-		logger.Fatalf("Failed to update application document: %s", err)
+		logger.Fatalf("Failed to remove key: %s", err)
 	}
 }
 

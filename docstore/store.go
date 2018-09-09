@@ -318,3 +318,32 @@ func (s *AppKeyStore) AddKey(req *appkeypb.AddKeyRequest, logger *log.Logger) (*
 	}
 	return &appkeypb.AddKeyResponse{}, nil
 }
+
+func (s *AppKeyStore) RemoveKey(req *appkeypb.RemoveKeyRequest, logger *log.Logger) (*appkeypb.RemoveKeyResponse, error) {
+	for _, fingerprint := range req.Fingerprints {
+		_, err := s.DeleteKeyDoc(req.App, fingerprint)
+		if err != nil {
+			logger.Printf("Failed delete key %s: %s", fingerprint, err)
+		}
+		_, err = s.DeleteKeyMetaDoc(req.App, fingerprint)
+		if err != nil {
+			logger.Printf("Failed delete key %s metadata: %s", fingerprint, err)
+		}
+	}
+	app, _, err := s.GetAppDoc(req.App)
+	if err != nil {
+		logger.Printf("Failed to get app %d: %s", req.App, err)
+		return nil, err
+	}
+	for _, fingerprint := range req.Fingerprints {
+		if _, found := app.Keys[fingerprint]; !found {
+			logger.Fatalf("App %d does not have  key %s", req.App, fingerprint)
+		}
+		delete(app.Keys, fingerprint)
+	}
+	_, err = s.PutAppDoc(app)
+	if err != nil {
+		logger.Fatalf("Failed to update application document: %s", err)
+	}
+	return &appkeypb.RemoveKeyResponse{}, nil
+}
