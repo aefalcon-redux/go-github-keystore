@@ -255,3 +255,12 @@ func (s *AppKeyStore) RemoveApp(req *appkeypb.RemoveAppRequest, logger *log.Logg
 	}
 	return &appkeypb.RemoveAppResponse{}, nil
 }
+
+func (s *AppKeyStore) GetApp(req *appkeypb.GetAppRequest, logger *log.Logger) (*appkeypb.App, error) {
+	app, _, err := s.GetAppDoc(req.App)
+	if err != nil {
+		logger.Printf("Failed to get app %d: %s", req.App, err)
+		return nil, err
+	}
+	return app, err
+}
