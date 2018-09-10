@@ -318,7 +318,10 @@ func cmdListKeys(flagValues *flagValues, logger *log.Logger) {
 	if err != nil {
 		logger.Fatalf("Failed to make store: %s", err)
 	}
-	app, _, err := store.GetAppDoc(flagValues.App)
+	req := appkeypb.GetAppRequest{
+		App: flagValues.App,
+	}
+	app, err := store.GetApp(&req, logger)
 	if err != nil {
 		logger.Fatalf("Failed to get app %d: %s", flagValues.App, err)
 	}
