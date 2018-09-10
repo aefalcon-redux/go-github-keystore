@@ -42,6 +42,15 @@ type AppKeyStore struct {
 	Links    appkeypb.Links
 }
 
+func (s *AppKeyStore) InitDb(logger *log.Logger) error {
+	var index appkeypb.AppIndex
+	_, err := s.PutAppIndexDoc(&index)
+	if err != nil {
+		logger.Fatalf("Failed to put application index")
+	}
+	return err
+}
+
 func (s *AppKeyStore) AppIndexName() (string, error) {
 	uritmpl, err := uritemplates.Parse(s.Links.AppIndex)
 	if err != nil {

@@ -170,10 +170,9 @@ func cmdInitDb(flagValues *flagValues, logger *log.Logger) {
 	if err != nil {
 		logger.Fatalf("Failed to make store: %s", err)
 	}
-	var index appkeypb.AppIndex
-	_, err = store.PutAppIndexDoc(&index)
+	err = store.InitDb(logger)
 	if err != nil {
-		logger.Fatalf("Failed to put application index")
+		logger.Fatalf("Failed to initialize new database: %s", err)
 	}
 }
 
