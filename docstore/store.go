@@ -59,6 +59,7 @@ type AppKeyStore struct {
 	Links    appkeypb.Links
 }
 
+var _ keyservice.ManagerService = &AppKeyStore{}
 var _ keyservice.SigningService = &AppKeyStore{}
 
 func (s *AppKeyStore) InitDb(logger *log.Logger) error {
