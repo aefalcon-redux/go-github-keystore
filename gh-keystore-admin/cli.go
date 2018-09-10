@@ -1,24 +1,18 @@
 package main
 
 import (
-	"bytes"
-	"crypto/rsa"
-	"crypto/sha1"
-	"crypto/x509"
-	"encoding/pem"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/aefalcon-redux/github-keystore-protobuf/go/appkeypb"
 	"github.com/aefalcon-redux/go-github-keystore/docstore"
+	"github.com/aefalcon-redux/go-github-keystore/keyutils"
 	"github.com/aefalcon-redux/go-github-keystore/s3docstore"
 	"github.com/golang/protobuf/jsonpb"
 )
@@ -281,11 +275,11 @@ func cmdAddKey(flagValues *flagValues, logger *log.Logger) {
 	if err != nil {
 		logger.Fatalf("Failed to read key file %s: %s", flagValues.KeyFile, err)
 	}
-	key, err := ParsePrivateKey(keyBytes)
+	key, err := keyutils.ParsePrivateKey(keyBytes)
 	if err != nil {
 		logger.Fatalf("Failed to parse private key %s: %s", flagValues.KeyFile, err)
 	}
-	fingerprint, err := KeyFingerprint(key)
+	fingerprint, err := keyutils.KeyFingerprint(key)
 	if err != nil {
 		logger.Fatalf("Failed to calculate key fingerprint: %s", err)
 	}
@@ -369,36 +363,6 @@ func cmdRemoveApp(flagValues *flagValues, logger *log.Logger) {
 		logger.Fatalf("Failed to remove application %d", flagValues.App)
 	}
 	logger.Printf("Applicatoin %d removed", flagValues.App)
-}
-
-func ParsePrivateKey(key []byte) (*rsa.PrivateKey, error) {
-	block, _ := pem.Decode(key)
-	if block != nil && block.Type != "RSA PRIVATE KEY" {
-		return nil, fmt.Errorf("PEM data of type %s is not an RSA PRIVATE KEY", block.Type)
-	} else if block != nil {
-		key = block.Bytes
-	}
-	rsaKey, err := x509.ParsePKCS1PrivateKey(key)
-	if err != nil {
-		return nil, err
-	}
-	return rsaKey, rsaKey.Validate()
-}
-
-func KeyFingerprint(private *rsa.PrivateKey) (string, error) {
-	privateDer := x509.MarshalPKCS1PrivateKey(private)
-	cmd := exec.Command("openssl", "rsa", "-inform", "der", "-outform", "der", "-pubout")
-	cmd.Stdin = bytes.NewReader(privateDer)
-	publicBytes, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	fpBytes := sha1.Sum(publicBytes)
-	pairs := make([]string, len(fpBytes))
-	for i := 0; i < len(pairs); i++ {
-		pairs[i] = fmt.Sprintf("%x", fpBytes[i])
-	}
-	return strings.Join(pairs, ":"), nil
 }
 
 type CmdSpec struct {

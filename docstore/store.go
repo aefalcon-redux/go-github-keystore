@@ -1,11 +1,16 @@
 package docstore
 
 import (
+	"crypto"
+	"crypto/rsa"
+	"crypto/sha256"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/aefalcon-redux/github-keystore-protobuf/go/appkeypb"
+	"github.com/aefalcon-redux/go-github-keystore/keyservice"
+	"github.com/aefalcon-redux/go-github-keystore/keyutils"
 	"github.com/golang/protobuf/proto"
 	"github.com/jtacoma/uritemplates"
 )
@@ -29,6 +34,18 @@ func (e AppExists) Error() string {
 	return fmt.Sprintf("app %d already exists", uint64(e))
 }
 
+type UnsupportedSignatureAlgo string
+
+func (e UnsupportedSignatureAlgo) Error() string {
+	return fmt.Sprintf("unsupported algorithm %s", string(e))
+}
+
+type NoKeyForApp uint64
+
+func (e NoKeyForApp) Error() string {
+	return fmt.Sprintf("No key for app %d", uint64(e))
+}
+
 type DocStore interface {
 	GetDocument(name string, pb proto.Message) (*CacheMeta, error)
 	GetDocumentRaw(name string) ([]byte, *CacheMeta, error)
@@ -41,6 +58,8 @@ type AppKeyStore struct {
 	DocStore DocStore
 	Links    appkeypb.Links
 }
+
+var _ keyservice.SigningService = &AppKeyStore{}
 
 func (s *AppKeyStore) InitDb(logger *log.Logger) error {
 	var index appkeypb.AppIndex
@@ -355,4 +374,50 @@ func (s *AppKeyStore) RemoveKey(req *appkeypb.RemoveKeyRequest, logger *log.Logg
 		logger.Fatalf("Failed to update application document: %s", err)
 	}
 	return &appkeypb.RemoveKeyResponse{}, nil
+}
+
+func (s *AppKeyStore) Sign(req *appkeypb.SignRequest, logger *log.Logger) (*appkeypb.SignedData, error) {
+	if req.Algorithm != "RS256" {
+		return nil, UnsupportedSignatureAlgo(req.Algorithm)
+	}
+	// sign with RSASSA-PKCS1-V1_5-SIGN using SHA-256
+	app, _, err := s.GetAppDoc(req.App)
+	if err != nil {
+		logger.Printf("Failed to get application document: %s", err)
+		return nil, err
+	}
+	var key []byte
+	var fingerprint string
+	for _, keyEntry := range app.Keys {
+		if keyEntry.Meta.Disabled {
+			continue
+		}
+		key, _, err = s.GetKeyDoc(req.App, keyEntry.Meta.Fingerprint)
+		if err != nil {
+			logger.Printf("Failed to get key %s for app %d", keyEntry.Meta.Fingerprint, req.App)
+		}
+		fingerprint = keyEntry.Meta.Fingerprint
+		break
+	}
+	if key == nil {
+		logger.Printf("Did not find a key")
+		return nil, NoKeyForApp(req.App)
+	}
+	rsaKey, err := keyutils.ParsePrivateKey(key)
+	if err != nil {
+		logger.Printf("Failed to pare private key %s: %s", fingerprint, err)
+		return nil, err
+	}
+	digest := sha256.Sum256(req.ProtectedData)
+	sig, err := rsa.SignPKCS1v15(nil, rsaKey, crypto.SHA256, digest[:])
+	if err != nil {
+		logger.Printf("Failed to sign protected data: %s", err)
+		return nil, err
+	}
+	resp := appkeypb.SignedData{
+		Signature:          sig,
+		Algorithm:          req.Algorithm,
+		SigningFingerprint: fingerprint,
+	}
+	return &resp, nil
 }
