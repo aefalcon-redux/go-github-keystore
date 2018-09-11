@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"unicode"
@@ -13,6 +12,7 @@ import (
 	"github.com/aefalcon-redux/github-keystore-protobuf/go/appkeypb"
 	"github.com/aefalcon-redux/go-github-keystore/docstore"
 	"github.com/aefalcon-redux/go-github-keystore/keyutils"
+	"github.com/aefalcon-redux/go-github-keystore/kslog"
 	"github.com/aefalcon-redux/go-github-keystore/s3docstore"
 	"github.com/golang/protobuf/jsonpb"
 )
@@ -107,15 +107,15 @@ func MakeStore(config *appkeypb.AppKeyManagerConfig, links *appkeypb.Links) (*do
 	return &store, nil
 }
 
-func GetConfig(flags *flagValues, logger *log.Logger) (*appkeypb.AppKeyManagerConfig, error) {
+func GetConfig(flags *flagValues, logger kslog.KsLogger) (*appkeypb.AppKeyManagerConfig, error) {
 	configPath, err := expandPath(flags.ConfigPath)
 	if err != nil {
-		logger.Printf("Unable to expand path %s: %s", flags.ConfigPath, err)
+		logger.Logf("Unable to expand path %s: %s", flags.ConfigPath, err)
 		return nil, err
 	}
 	configFile, err := os.Open(configPath)
 	if err != nil {
-		logger.Printf("Unable to open configuration file %s: %s", configPath, err)
+		logger.Logf("Unable to open configuration file %s: %s", configPath, err)
 		return nil, err
 	}
 	defer configFile.Close()
@@ -123,7 +123,7 @@ func GetConfig(flags *flagValues, logger *log.Logger) (*appkeypb.AppKeyManagerCo
 	unmarshaler := jsonpb.Unmarshaler{}
 	err = unmarshaler.Unmarshal(configFile, &config)
 	if err != nil {
-		logger.Printf("Unable to unmarshal confguration: %s", err)
+		logger.Logf("Unable to unmarshal confguration: %s", err)
 		return nil, err
 	}
 	return &config, nil
@@ -153,24 +153,27 @@ func (v *flagValues) ValidateDecimal(flag, text string) error {
 	return nil
 }
 
-type CmdFunc func(flagValues *flagValues, logger *log.Logger)
+type CmdFunc func(flagValues *flagValues, logger kslog.KsLogger)
 
-func cmdInitDb(flagValues *flagValues, logger *log.Logger) {
+func cmdInitDb(flagValues *flagValues, logger kslog.KsLogger) {
 	config, err := GetConfig(flagValues, logger)
 	if err != nil {
-		logger.Fatalf("Failed to get configuration: %s", err)
+		logger.Errorf("Failed to get configuration: %s", err)
+		os.Exit(1)
 	}
 	store, err := MakeStore(config, nil)
 	if err != nil {
-		logger.Fatalf("Failed to make store: %s", err)
+		logger.Errorf("Failed to make store: %s", err)
+		os.Exit(1)
 	}
 	err = store.InitDb(logger)
 	if err != nil {
-		logger.Fatalf("Failed to initialize new database: %s", err)
+		logger.Errorf("Failed to initialize new database: %s", err)
+		os.Exit(1)
 	}
 }
 
-func cmdInitConfig(flagValues *flagValues, logger *log.Logger) {
+func cmdInitConfig(flagValues *flagValues, logger kslog.KsLogger) {
 	config := appkeypb.AppKeyManagerConfig{
 		DbLoc: &appkeypb.Location{},
 	}
@@ -189,101 +192,119 @@ func cmdInitConfig(flagValues *flagValues, logger *log.Logger) {
 	}
 	configPath, err := expandPath(flagValues.ConfigPath)
 	if err != nil {
-		logger.Fatalf("Unable to expand path %s: %s", flagValues.ConfigPath, err)
+		logger.Errorf("Unable to expand path %s: %s", flagValues.ConfigPath, err)
+		os.Exit(1)
 	}
 	configDir := filepath.Dir(configPath)
 	err = os.MkdirAll(configDir, 0750)
 	if err != nil {
-		logger.Fatalf("Unable to create directory %s: %s", configDir, err)
+		logger.Errorf("Unable to create directory %s: %s", configDir, err)
+		os.Exit(1)
 	}
 	configFile, err := os.Create(configPath)
 	defer configFile.Close()
 	if err != nil {
-		logger.Fatalf("Unable to create configuration file %s: %s", configPath, err)
+		logger.Errorf("Unable to create configuration file %s: %s", configPath, err)
+		os.Exit(1)
 	}
 	marshaler := jsonpb.Marshaler{
 		Indent: "   ",
 	}
 	err = marshaler.Marshal(configFile, &config)
 	if err != nil {
-		logger.Fatalf("Unable to marshal configuration: %s", err)
+		logger.Errorf("Unable to marshal configuration: %s", err)
+		os.Exit(1)
 	}
 	_, err = configFile.Write([]byte("\n"))
 	if err != nil {
-		logger.Fatalf("Unable to write to configuration file: %s", err)
+		logger.Errorf("Unable to write to configuration file: %s", err)
+		os.Exit(1)
 	}
 }
 
-func cmdListApps(flagValues *flagValues, logger *log.Logger) {
+func cmdListApps(flagValues *flagValues, logger kslog.KsLogger) {
 	config, err := GetConfig(flagValues, logger)
 	if err != nil {
-		logger.Fatalf("Failed to get configuration: %s", err)
+		logger.Errorf("Failed to get configuration: %s", err)
+		os.Exit(1)
 	}
 	store, err := MakeStore(config, nil)
 	if err != nil {
-		logger.Fatalf("Failed to make store: %s", err)
+		logger.Errorf("Failed to make store: %s", err)
+		os.Exit(1)
 	}
 	req := appkeypb.ListAppsRequest{}
 	index, err := store.ListApps(&req, logger)
 	if err != nil {
-		logger.Fatalf("Failed go get app index: %s", err)
+		logger.Errorf("Failed go get app index: %s", err)
+		os.Exit(1)
 	}
 	if err != nil {
-		logger.Fatalf("Failed to put application index")
+		logger.Errorf("Failed to put application index")
+		os.Exit(1)
 	}
 	if len(index.AppRefs) == 0 {
-		logger.Printf("No apps")
+		logger.Logf("No apps")
 	} else {
 		for appId := range index.AppRefs {
-			logger.Printf("app %d", appId)
+			logger.Logf("app %d", appId)
 		}
 	}
 }
 
-func cmdAddApp(flagValues *flagValues, logger *log.Logger) {
+func cmdAddApp(flagValues *flagValues, logger kslog.KsLogger) {
 	config, err := GetConfig(flagValues, logger)
 	if err != nil {
-		logger.Fatalf("Failed to get configuration: %s", err)
+		logger.Errorf("Failed to get configuration: %s", err)
+		os.Exit(1)
 	}
 	store, err := MakeStore(config, nil)
 	if err != nil {
-		logger.Fatalf("Failed to make store: %s", err)
+		logger.Errorf("Failed to make store: %s", err)
+		os.Exit(1)
 	}
 	req := appkeypb.AddAppRequest{
 		App: flagValues.App,
 	}
 	_, err = store.AddApp(&req, logger)
 	if err != nil {
-		logger.Fatalf("Failed to create application %d: %s", flagValues.App, err)
+		logger.Errorf("Failed to create application %d: %s", flagValues.App, err)
+		os.Exit(1)
 	}
 }
 
-func cmdAddKey(flagValues *flagValues, logger *log.Logger) {
+func cmdAddKey(flagValues *flagValues, logger kslog.KsLogger) {
 	config, err := GetConfig(flagValues, logger)
 	if err != nil {
-		logger.Fatalf("Failed to get configuration: %s", err)
+		logger.Errorf("Failed to get configuration: %s", err)
+		os.Exit(1)
 	}
 	store, err := MakeStore(config, nil)
 	if err != nil {
-		logger.Fatalf("Failed to make store: %s", err)
+		logger.Errorf("Failed to make store: %s", err)
+		os.Exit(1)
 	}
 	keyFile, err := os.Open(flagValues.KeyFile)
 	if err != nil {
-		logger.Fatalf("Failed to open key file %s", flagValues.KeyFile)
+		logger.Errorf("Failed to open key file %s", flagValues.KeyFile)
+		os.Exit(1)
 	}
 	keyBytes, err := ioutil.ReadAll(keyFile)
 	if err != nil {
-		logger.Fatalf("Failed to read key file %s: %s", flagValues.KeyFile, err)
+		logger.Errorf("Failed to read key file %s: %s", flagValues.KeyFile, err)
+		os.Exit(1)
 	}
 	key, err := keyutils.ParsePrivateKey(keyBytes)
 	if err != nil {
-		logger.Fatalf("Failed to parse private key %s: %s", flagValues.KeyFile, err)
+		logger.Errorf("Failed to parse private key %s: %s", flagValues.KeyFile, err)
+		os.Exit(1)
 	}
 	fingerprint, err := keyutils.KeyFingerprint(key)
 	if err != nil {
-		logger.Fatalf("Failed to calculate key fingerprint: %s", err)
+		logger.Errorf("Failed to calculate key fingerprint: %s", err)
+		os.Exit(1)
 	}
-	logger.Printf("Key has fingerprint %s", fingerprint)
+	logger.Logf("Key has fingerprint %s", fingerprint)
 	req := appkeypb.AddKeyRequest{
 		App: flagValues.App,
 		Keys: []*appkeypb.AppKey{
@@ -298,43 +319,49 @@ func cmdAddKey(flagValues *flagValues, logger *log.Logger) {
 	}
 	_, err = store.AddKey(&req, logger)
 	if err != nil {
-		logger.Fatalf("Failed to add key: %s", err)
+		logger.Errorf("Failed to add key: %s", err)
+		os.Exit(1)
 	}
 }
 
-func cmdListKeys(flagValues *flagValues, logger *log.Logger) {
+func cmdListKeys(flagValues *flagValues, logger kslog.KsLogger) {
 	config, err := GetConfig(flagValues, logger)
 	if err != nil {
-		logger.Fatalf("Failed to get configuration: %s", err)
+		logger.Errorf("Failed to get configuration: %s", err)
+		os.Exit(1)
 	}
 	store, err := MakeStore(config, nil)
 	if err != nil {
-		logger.Fatalf("Failed to make store: %s", err)
+		logger.Errorf("Failed to make store: %s", err)
+		os.Exit(1)
 	}
 	req := appkeypb.GetAppRequest{
 		App: flagValues.App,
 	}
 	app, err := store.GetApp(&req, logger)
 	if err != nil {
-		logger.Fatalf("Failed to get app %d: %s", flagValues.App, err)
+		logger.Errorf("Failed to get app %d: %s", flagValues.App, err)
+		os.Exit(1)
 	}
 	if len(app.Keys) == 0 {
-		logger.Printf("App has no keys")
+		logger.Logf("App has no keys")
 		return
 	}
 	for _, key := range app.Keys {
-		logger.Printf("key %s", key.Meta.Fingerprint)
+		logger.Logf("key %s", key.Meta.Fingerprint)
 	}
 }
 
-func cmdRemoveKey(flagValues *flagValues, logger *log.Logger) {
+func cmdRemoveKey(flagValues *flagValues, logger kslog.KsLogger) {
 	config, err := GetConfig(flagValues, logger)
 	if err != nil {
-		logger.Fatalf("Failed to get configuration: %s", err)
+		logger.Errorf("Failed to get configuration: %s", err)
+		os.Exit(1)
 	}
 	store, err := MakeStore(config, nil)
 	if err != nil {
-		logger.Fatalf("Failed to make store: %s", err)
+		logger.Errorf("Failed to make store: %s", err)
+		os.Exit(1)
 	}
 	req := appkeypb.RemoveKeyRequest{
 		App:          flagValues.App,
@@ -342,34 +369,38 @@ func cmdRemoveKey(flagValues *flagValues, logger *log.Logger) {
 	}
 	_, err = store.RemoveKey(&req, logger)
 	if err != nil {
-		logger.Fatalf("Failed to remove key: %s", err)
+		logger.Errorf("Failed to remove key: %s", err)
+		os.Exit(1)
 	}
 }
 
-func cmdRemoveApp(flagValues *flagValues, logger *log.Logger) {
+func cmdRemoveApp(flagValues *flagValues, logger kslog.KsLogger) {
 	config, err := GetConfig(flagValues, logger)
 	if err != nil {
-		logger.Fatalf("Failed to get configuration: %s", err)
+		logger.Errorf("Failed to get configuration: %s", err)
+		os.Exit(1)
 	}
 	store, err := MakeStore(config, nil)
 	if err != nil {
-		logger.Fatalf("Failed to make store: %s", err)
+		logger.Errorf("Failed to make store: %s", err)
+		os.Exit(1)
 	}
 	req := appkeypb.RemoveAppRequest{
 		App: flagValues.App,
 	}
 	_, err = store.RemoveApp(&req, logger)
 	if err != nil {
-		logger.Fatalf("Failed to remove application %d", flagValues.App)
+		logger.Errorf("Failed to remove application %d", flagValues.App)
+		os.Exit(1)
 	}
-	logger.Printf("Applicatoin %d removed", flagValues.App)
+	logger.Logf("Applicatoin %d removed", flagValues.App)
 }
 
 type CmdSpec struct {
 	Flags         *flag.FlagSet
 	RequiredFlags []string
 	CheckFlags    func(flagValues *flagValues) error
-	CmdFunc       func(flagValues *flagValues, logger *log.Logger)
+	CmdFunc       func(flagValues *flagValues, logger kslog.KsLogger)
 }
 
 func SetupFlags(flags *flagValues) map[string]CmdSpec {
@@ -470,7 +501,7 @@ func main() {
 		cmdSpec.Flags.PrintDefaults()
 		os.Exit(2)
 	}
-	logger := log.New(os.Stderr, "", log.Ltime)
-	logger.Printf("Using configuration file %s", flagValues.ConfigPath)
+	logger := kslog.DefaultLogger{}
+	logger.Logf("Using configuration file %s", flagValues.ConfigPath)
 	cmdSpec.CmdFunc(&flagValues, logger)
 }

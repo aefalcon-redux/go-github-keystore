@@ -5,13 +5,13 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"fmt"
-	"log"
 	"strconv"
 	"time"
 
 	"github.com/aefalcon-redux/github-keystore-protobuf/go/appkeypb"
 	"github.com/aefalcon-redux/go-github-keystore/keyservice"
 	"github.com/aefalcon-redux/go-github-keystore/keyutils"
+	"github.com/aefalcon-redux/go-github-keystore/kslog"
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
 	structpb "github.com/golang/protobuf/ptypes/struct"
@@ -71,11 +71,11 @@ type AppKeyStore struct {
 var _ keyservice.ManagerService = &AppKeyStore{}
 var _ keyservice.SigningService = &AppKeyStore{}
 
-func (s *AppKeyStore) InitDb(logger *log.Logger) error {
+func (s *AppKeyStore) InitDb(logger kslog.KsLogger) error {
 	var index appkeypb.AppIndex
 	_, err := s.PutAppIndexDoc(&index)
 	if err != nil {
-		logger.Fatalf("Failed to put application index")
+		logger.Error("Failed to put application index")
 	}
 	return err
 }
@@ -214,7 +214,7 @@ func (s *AppKeyStore) DeleteKeyMetaDoc(appId uint64, fingerprint string) (*Cache
 	return s.DocStore.DeleteDocument(docName)
 }
 
-func (s *AppKeyStore) AddApp(req *appkeypb.AddAppRequest, logger *log.Logger) (*appkeypb.AddAppResponse, error) {
+func (s *AppKeyStore) AddApp(req *appkeypb.AddAppRequest, logger kslog.KsLogger) (*appkeypb.AddAppResponse, error) {
 	index, _, err := s.GetAppIndexDoc()
 	if err != nil {
 		return nil, err
@@ -242,84 +242,84 @@ func (s *AppKeyStore) AddApp(req *appkeypb.AddAppRequest, logger *log.Logger) (*
 	return &appkeypb.AddAppResponse{}, nil
 }
 
-func (s *AppKeyStore) RemoveApp(req *appkeypb.RemoveAppRequest, logger *log.Logger) (*appkeypb.RemoveAppResponse, error) {
+func (s *AppKeyStore) RemoveApp(req *appkeypb.RemoveAppRequest, logger kslog.KsLogger) (*appkeypb.RemoveAppResponse, error) {
 	index, _, err := s.GetAppIndexDoc()
 	if err != nil {
 		return nil, err
 	}
 	if _, found := index.AppRefs[req.App]; !found {
-		logger.Printf("Application %d not in index", req.App)
+		logger.Logf("Application %d not in index", req.App)
 	} else {
 		delete(index.AppRefs, req.App)
 		_, err = s.PutAppIndexDoc(index)
 		if err != nil {
-			logger.Fatalf("Failed to put updated application index")
+			logger.Error("Failed to put updated application index")
 			return nil, err
 		}
-		logger.Printf("Application %d removed from index", req.App)
+		logger.Logf("Application %d removed from index", req.App)
 	}
 	app, _, err := s.GetAppDoc(req.App)
 	if err != nil {
-		logger.Printf("Failed to get app %d: %s", req.App, err)
+		logger.Logf("Failed to get app %d: %s", req.App, err)
 		return nil, err
 	}
 	_, err = s.DeleteAppDoc(req.App)
 	if err != nil {
-		logger.Printf("Failed to remove app document for %d: %s", req.App, err)
+		logger.Logf("Failed to remove app document for %d: %s", req.App, err)
 		return nil, err
 	}
-	logger.Printf("Deleted application %d", req.App)
+	logger.Logf("Deleted application %d", req.App)
 	removeKeysOk := true
 	for _, key := range app.Keys {
 		_, err = s.DeleteKeyMetaDoc(req.App, key.Meta.Fingerprint)
 		if err != nil {
-			logger.Printf("Failed to remove key %s metadata", key.Meta.Fingerprint)
+			logger.Logf("Failed to remove key %s metadata", key.Meta.Fingerprint)
 			removeKeysOk = false
 		} else {
-			logger.Printf("Deleted key %s metadata", key.Meta.Fingerprint)
+			logger.Logf("Deleted key %s metadata", key.Meta.Fingerprint)
 		}
 		_, err = s.DeleteKeyDoc(req.App, key.Meta.Fingerprint)
 		if err != nil {
-			logger.Printf("Failed to remove key %s", key.Meta.Fingerprint)
+			logger.Logf("Failed to remove key %s", key.Meta.Fingerprint)
 			removeKeysOk = false
 		} else {
-			logger.Printf("Deleted key %s", key.Meta.Fingerprint)
+			logger.Logf("Deleted key %s", key.Meta.Fingerprint)
 		}
 	}
 	if !removeKeysOk {
 		return nil, fmt.Errorf("Failed to remove keys")
 	} else {
-		logger.Printf("Deleted all keys")
+		logger.Logf("Deleted all keys")
 	}
 	return &appkeypb.RemoveAppResponse{}, nil
 }
 
-func (s *AppKeyStore) GetApp(req *appkeypb.GetAppRequest, logger *log.Logger) (*appkeypb.App, error) {
+func (s *AppKeyStore) GetApp(req *appkeypb.GetAppRequest, logger kslog.KsLogger) (*appkeypb.App, error) {
 	app, _, err := s.GetAppDoc(req.App)
 	if err != nil {
-		logger.Printf("Failed to get app %d: %s", req.App, err)
+		logger.Logf("Failed to get app %d: %s", req.App, err)
 		return nil, err
 	}
 	return app, err
 }
 
-func (s *AppKeyStore) ListApps(req *appkeypb.ListAppsRequest, logger *log.Logger) (*appkeypb.AppIndex, error) {
+func (s *AppKeyStore) ListApps(req *appkeypb.ListAppsRequest, logger kslog.KsLogger) (*appkeypb.AppIndex, error) {
 	index, _, err := s.GetAppIndexDoc()
 	if err != nil {
-		logger.Printf("Failed to get application index: %s", err)
+		logger.Logf("Failed to get application index: %s", err)
 		return nil, err
 	}
 	return index, err
 }
 
-func (s *AppKeyStore) AddKey(req *appkeypb.AddKeyRequest, logger *log.Logger) (*appkeypb.AddKeyResponse, error) {
+func (s *AppKeyStore) AddKey(req *appkeypb.AddKeyRequest, logger kslog.KsLogger) (*appkeypb.AddKeyResponse, error) {
 	if len(req.Keys) == 0 {
-		logger.Printf("No keys to add")
+		logger.Logf("No keys to add")
 		return &appkeypb.AddKeyResponse{}, nil
 	}
 	app, _, err := s.GetAppDoc(req.App)
 	if err != nil {
-		logger.Printf("Failed to get app %d: %s", req.App, err)
+		logger.Logf("Failed to get app %d: %s", req.App, err)
 		return nil, err
 	}
 	if len(app.Keys) == 0 {
@@ -331,7 +331,7 @@ func (s *AppKeyStore) AddKey(req *appkeypb.AddKeyRequest, logger *log.Logger) (*
 	} else {
 		for _, key := range req.Keys {
 			if _, found := app.Keys[key.Meta.Fingerprint]; found {
-				logger.Printf("App %d already has key %s", req.App, key.Meta.Fingerprint)
+				logger.Logf("App %d already has key %s", req.App, key.Meta.Fingerprint)
 			}
 			key.Meta.App = req.App
 			app.Keys[key.Meta.Fingerprint] = &appkeypb.AppKeyIndexEntry{
@@ -339,54 +339,54 @@ func (s *AppKeyStore) AddKey(req *appkeypb.AddKeyRequest, logger *log.Logger) (*
 			}
 			_, err = s.PutKeyDoc(req.App, key.Meta.Fingerprint, key.Key)
 			if err != nil {
-				logger.Printf("Failed to put key document: %s", err)
+				logger.Logf("Failed to put key document: %s", err)
 				return nil, err
 			}
 			_, err = s.PutKeyMetaDoc(key.Meta)
 			if err != nil {
-				logger.Printf("Failed to put key metadata document: %s", err)
+				logger.Logf("Failed to put key metadata document: %s", err)
 				return nil, err
 			}
 		}
 	}
 	_, err = s.PutAppDoc(app)
 	if err != nil {
-		logger.Printf("Failed to update application document: %s", err)
+		logger.Logf("Failed to update application document: %s", err)
 		return nil, err
 	}
 	return &appkeypb.AddKeyResponse{}, nil
 }
 
-func (s *AppKeyStore) RemoveKey(req *appkeypb.RemoveKeyRequest, logger *log.Logger) (*appkeypb.RemoveKeyResponse, error) {
+func (s *AppKeyStore) RemoveKey(req *appkeypb.RemoveKeyRequest, logger kslog.KsLogger) (*appkeypb.RemoveKeyResponse, error) {
 	for _, fingerprint := range req.Fingerprints {
 		_, err := s.DeleteKeyDoc(req.App, fingerprint)
 		if err != nil {
-			logger.Printf("Failed delete key %s: %s", fingerprint, err)
+			logger.Logf("Failed delete key %s: %s", fingerprint, err)
 		}
 		_, err = s.DeleteKeyMetaDoc(req.App, fingerprint)
 		if err != nil {
-			logger.Printf("Failed delete key %s metadata: %s", fingerprint, err)
+			logger.Logf("Failed delete key %s metadata: %s", fingerprint, err)
 		}
 	}
 	app, _, err := s.GetAppDoc(req.App)
 	if err != nil {
-		logger.Printf("Failed to get app %d: %s", req.App, err)
+		logger.Logf("Failed to get app %d: %s", req.App, err)
 		return nil, err
 	}
 	for _, fingerprint := range req.Fingerprints {
 		if _, found := app.Keys[fingerprint]; !found {
-			logger.Fatalf("App %d does not have  key %s", req.App, fingerprint)
+			logger.Errorf("App %d does not have  key %s", req.App, fingerprint)
 		}
 		delete(app.Keys, fingerprint)
 	}
 	_, err = s.PutAppDoc(app)
 	if err != nil {
-		logger.Fatalf("Failed to update application document: %s", err)
+		logger.Errorf("Failed to update application document: %s", err)
 	}
 	return &appkeypb.RemoveKeyResponse{}, nil
 }
 
-func (s *AppKeyStore) anyKeyFromApp(app *appkeypb.App, logger *log.Logger) (*rsa.PrivateKey, string, error) {
+func (s *AppKeyStore) anyKeyFromApp(app *appkeypb.App, logger kslog.KsLogger) (*rsa.PrivateKey, string, error) {
 	var key []byte
 	var fingerprint string
 	for _, keyEntry := range app.Keys {
@@ -396,42 +396,42 @@ func (s *AppKeyStore) anyKeyFromApp(app *appkeypb.App, logger *log.Logger) (*rsa
 		var err error
 		key, _, err = s.GetKeyDoc(app.Id, keyEntry.Meta.Fingerprint)
 		if err != nil {
-			logger.Printf("Failed to get key %s for app %d", keyEntry.Meta.Fingerprint, app.Id)
+			logger.Logf("Failed to get key %s for app %d", keyEntry.Meta.Fingerprint, app.Id)
 		}
 		fingerprint = keyEntry.Meta.Fingerprint
 		break
 	}
 	if key == nil {
-		logger.Printf("Did not find a key for app %d", app.Id)
+		logger.Logf("Did not find a key for app %d", app.Id)
 		return nil, "", NoKeyForApp(app.Id)
 	}
 	rsaKey, err := keyutils.ParsePrivateKey(key)
 	if err != nil {
-		logger.Printf("Failed to parse private key %s: %s", fingerprint, err)
+		logger.Logf("Failed to parse private key %s: %s", fingerprint, err)
 		return nil, "", err
 	}
 	return rsaKey, fingerprint, nil
 }
 
-func (s *AppKeyStore) Sign(req *appkeypb.SignRequest, logger *log.Logger) (*appkeypb.SignedData, error) {
+func (s *AppKeyStore) Sign(req *appkeypb.SignRequest, logger kslog.KsLogger) (*appkeypb.SignedData, error) {
 	if req.Algorithm != "RS256" {
 		return nil, UnsupportedSignatureAlgo(req.Algorithm)
 	}
 	// sign with RSASSA-PKCS1-V1_5-SIGN using SHA-256
 	app, _, err := s.GetAppDoc(req.App)
 	if err != nil {
-		logger.Printf("Failed to get application document: %s", err)
+		logger.Logf("Failed to get application document: %s", err)
 		return nil, err
 	}
 	rsaKey, fingerprint, err := s.anyKeyFromApp(app, logger)
 	if err != nil {
-		logger.Printf("Failed to get key for app %d: %s", req.App, err)
+		logger.Logf("Failed to get key for app %d: %s", req.App, err)
 		return nil, err
 	}
 	digest := sha256.Sum256(req.ProtectedData)
 	sig, err := rsa.SignPKCS1v15(nil, rsaKey, crypto.SHA256, digest[:])
 	if err != nil {
-		logger.Printf("Failed to sign protected data: %s", err)
+		logger.Logf("Failed to sign protected data: %s", err)
 		return nil, err
 	}
 	resp := appkeypb.SignedData{
@@ -544,24 +544,24 @@ func (s *AppKeyStore) validateClaims(req *appkeypb.SignJwtRequest, now time.Time
 	return nil
 }
 
-func (s *AppKeyStore) SignJwt(req *appkeypb.SignJwtRequest, logger *log.Logger) (*appkeypb.SignJwtResponse, error) {
+func (s *AppKeyStore) SignJwt(req *appkeypb.SignJwtRequest, logger kslog.KsLogger) (*appkeypb.SignJwtResponse, error) {
 	if req.Algorithm != "RS256" {
 		return nil, UnsupportedSignatureAlgo(req.Algorithm)
 	}
 	now := time.Now().UTC()
 	err := s.validateClaims(req, now)
 	if err != nil {
-		logger.Printf("Claims are invalid: %s", err)
+		logger.Logf("Claims are invalid: %s", err)
 		return nil, err
 	}
 	app, _, err := s.GetAppDoc(req.App)
 	if err != nil {
-		logger.Printf("Failed to get application document: %s", err)
+		logger.Logf("Failed to get application document: %s", err)
 		return nil, err
 	}
 	rsaKey, fingerprint, err := s.anyKeyFromApp(app, logger)
 	if err != nil {
-		logger.Printf("Failed to get key for app %d: %s", req.App, err)
+		logger.Logf("Failed to get key for app %d: %s", req.App, err)
 		return nil, err
 	}
 	req.Claims.Fields["iss"] = &structpb.Value{
@@ -579,7 +579,7 @@ func (s *AppKeyStore) SignJwt(req *appkeypb.SignJwtRequest, logger *log.Logger) 
 	}
 	claims, err := jsonMarshaler.MarshalToString(req.Claims)
 	if err != nil {
-		logger.Printf("Failed to marshal claims: %s", err)
+		logger.Logf("Failed to marshal claims: %s", err)
 		return nil, err
 	}
 	claimsBytes := []byte(claims)
@@ -587,7 +587,7 @@ func (s *AppKeyStore) SignJwt(req *appkeypb.SignJwtRequest, logger *log.Logger) 
 	digest := sha256.Sum256(claimsBytes)
 	sig, err := rsa.SignPKCS1v15(nil, rsaKey, crypto.SHA256, digest[:])
 	if err != nil {
-		logger.Printf("Failed to sign claims data: %s", err)
+		logger.Logf("Failed to sign claims data: %s", err)
 		return nil, err
 	}
 	resp := appkeypb.SignJwtResponse{
