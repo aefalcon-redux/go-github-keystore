@@ -490,10 +490,10 @@ func main() {
 	}
 	cmdSpec := cmdSpecs[subArgs[0]]
 	err := cmdSpec.Flags.Parse(subArgs[1:])
-	if err != nil {
+	if err == nil {
 		err = flagValues.Require(cmdSpec.RequiredFlags...)
 	}
-	if err != nil && cmdSpec.CheckFlags != nil {
+	if err == nil && cmdSpec.CheckFlags != nil {
 		err = cmdSpec.CheckFlags(&flagValues)
 	}
 	if err != nil {
