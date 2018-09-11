@@ -326,7 +326,9 @@ func (s *AppKeyStore) AddKey(req *appkeypb.AddKeyRequest, logger kslog.KsLogger)
 		app.Keys = make(map[string]*appkeypb.AppKeyIndexEntry)
 		for _, key := range req.Keys {
 			key.Meta.App = req.App
-			app.Keys[key.Meta.Fingerprint].Meta = key.Meta
+			app.Keys[key.Meta.Fingerprint] = &appkeypb.AppKeyIndexEntry{
+				Meta: key.Meta,
+			}
 		}
 	} else {
 		for _, key := range req.Keys {
