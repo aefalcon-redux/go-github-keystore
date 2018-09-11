@@ -37,6 +37,12 @@ func (e AppExists) Error() string {
 	return fmt.Sprintf("app %d already exists", uint64(e))
 }
 
+type UnallowedAppId uint64
+
+func (e UnallowedAppId) Error() string {
+	return fmt.Sprintf("app id %d is not allowed", uint64(e))
+}
+
 type UnsupportedSignatureAlgo string
 
 func (e UnsupportedSignatureAlgo) Error() string {
@@ -215,6 +221,10 @@ func (s *AppKeyStore) DeleteKeyMetaDoc(appId uint64, fingerprint string) (*Cache
 }
 
 func (s *AppKeyStore) AddApp(req *appkeypb.AddAppRequest, logger kslog.KsLogger) (*appkeypb.AddAppResponse, error) {
+	if req.App == 0 {
+		logger.Errorf("Attempted to add app %d", req.App)
+		return nil, UnallowedAppId(req.App)
+	}
 	index, _, err := s.GetAppIndexDoc()
 	if err != nil {
 		return nil, err
