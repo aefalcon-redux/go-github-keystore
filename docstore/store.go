@@ -6,12 +6,15 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/aefalcon-redux/github-keystore-protobuf/go/appkeypb"
 	"github.com/aefalcon-redux/go-github-keystore/keyservice"
 	"github.com/aefalcon-redux/go-github-keystore/keyutils"
+	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
+	structpb "github.com/golang/protobuf/ptypes/struct"
 	"github.com/jtacoma/uritemplates"
 )
 
@@ -44,6 +47,12 @@ type NoKeyForApp uint64
 
 func (e NoKeyForApp) Error() string {
 	return fmt.Sprintf("No key for app %d", uint64(e))
+}
+
+type InvalidClaims string
+
+func (e InvalidClaims) Error() string {
+	return string(e)
 }
 
 type DocStore interface {
@@ -377,6 +386,33 @@ func (s *AppKeyStore) RemoveKey(req *appkeypb.RemoveKeyRequest, logger *log.Logg
 	return &appkeypb.RemoveKeyResponse{}, nil
 }
 
+func (s *AppKeyStore) anyKeyFromApp(app *appkeypb.App, logger *log.Logger) (*rsa.PrivateKey, string, error) {
+	var key []byte
+	var fingerprint string
+	for _, keyEntry := range app.Keys {
+		if keyEntry.Meta.Disabled {
+			continue
+		}
+		var err error
+		key, _, err = s.GetKeyDoc(app.Id, keyEntry.Meta.Fingerprint)
+		if err != nil {
+			logger.Printf("Failed to get key %s for app %d", keyEntry.Meta.Fingerprint, app.Id)
+		}
+		fingerprint = keyEntry.Meta.Fingerprint
+		break
+	}
+	if key == nil {
+		logger.Printf("Did not find a key for app %d", app.Id)
+		return nil, "", NoKeyForApp(app.Id)
+	}
+	rsaKey, err := keyutils.ParsePrivateKey(key)
+	if err != nil {
+		logger.Printf("Failed to parse private key %s: %s", fingerprint, err)
+		return nil, "", err
+	}
+	return rsaKey, fingerprint, nil
+}
+
 func (s *AppKeyStore) Sign(req *appkeypb.SignRequest, logger *log.Logger) (*appkeypb.SignedData, error) {
 	if req.Algorithm != "RS256" {
 		return nil, UnsupportedSignatureAlgo(req.Algorithm)
@@ -387,26 +423,9 @@ func (s *AppKeyStore) Sign(req *appkeypb.SignRequest, logger *log.Logger) (*appk
 		logger.Printf("Failed to get application document: %s", err)
 		return nil, err
 	}
-	var key []byte
-	var fingerprint string
-	for _, keyEntry := range app.Keys {
-		if keyEntry.Meta.Disabled {
-			continue
-		}
-		key, _, err = s.GetKeyDoc(req.App, keyEntry.Meta.Fingerprint)
-		if err != nil {
-			logger.Printf("Failed to get key %s for app %d", keyEntry.Meta.Fingerprint, req.App)
-		}
-		fingerprint = keyEntry.Meta.Fingerprint
-		break
-	}
-	if key == nil {
-		logger.Printf("Did not find a key")
-		return nil, NoKeyForApp(req.App)
-	}
-	rsaKey, err := keyutils.ParsePrivateKey(key)
+	rsaKey, fingerprint, err := s.anyKeyFromApp(app, logger)
 	if err != nil {
-		logger.Printf("Failed to pare private key %s: %s", fingerprint, err)
+		logger.Printf("Failed to get key for app %d: %s", req.App, err)
 		return nil, err
 	}
 	digest := sha256.Sum256(req.ProtectedData)
@@ -419,6 +438,162 @@ func (s *AppKeyStore) Sign(req *appkeypb.SignRequest, logger *log.Logger) (*appk
 		Signature:          sig,
 		Algorithm:          req.Algorithm,
 		SigningFingerprint: fingerprint,
+	}
+	return &resp, nil
+}
+
+func validateIssClaim(app uint64, iss string) error {
+	issAsInt, err := strconv.ParseUint(iss, 10, 64)
+	if err != nil {
+		return InvalidClaims(fmt.Sprintf("Could not parse `iss` to int: %s", err))
+	}
+	if app != issAsInt {
+		return InvalidClaims(fmt.Sprintf("Application Id in request (%d) does not match claim `iss` (%d)", app, issAsInt))
+	}
+	return nil
+}
+
+func validateExpNbfClaims(exp, nbf, now time.Time) error {
+	if !exp.After(now) {
+		return InvalidClaims("`exp` indicates claims are already expired")
+	}
+	if !nbf.IsZero() {
+		if !exp.After(nbf) {
+			return InvalidClaims("`exp` must be greater than `nbf`")
+		}
+		if nbf.Before(now) && now.Sub(nbf) > time.Second*5 {
+			return InvalidClaims("`nbf` is more than 5 seconds in the past")
+		}
+	}
+	return nil
+}
+
+func floatToTime(ts float64) time.Time {
+	seconds := int64(ts)
+	fraction := ts - float64(seconds)
+	nanos := int64(fraction * 1e9)
+	return time.Unix(seconds, nanos)
+}
+
+func timeToFloat(t time.Time) float64 {
+	unixNano := t.UnixNano()
+	floatT := float64(unixNano / int64(1e9))
+	floatT += float64(unixNano%1e9) / float64(1e9)
+	return floatT
+}
+
+func pbValToStr(v *structpb.Value) (string, bool) {
+	stringVal, ok := v.Kind.(*structpb.Value_StringValue)
+	if !ok {
+		return "", false
+	}
+	return stringVal.StringValue, true
+}
+
+func pbValToNum(v *structpb.Value) (float64, bool) {
+	numVal, ok := v.Kind.(*structpb.Value_NumberValue)
+	if !ok {
+		return 0.0, false
+	}
+	return numVal.NumberValue, true
+}
+
+func pbValToTime(v *structpb.Value) (time.Time, bool) {
+	numTime, ok := pbValToNum(v)
+	if !ok {
+		return time.Time{}, false
+	}
+	return floatToTime(numTime), true
+}
+
+func (s *AppKeyStore) validateClaims(req *appkeypb.SignJwtRequest, now time.Time) error {
+	issVal := req.Claims.Fields["iss"]
+	if issVal == nil {
+		return InvalidClaims("Missing claim `iss`")
+	}
+	iss, ok := pbValToStr(issVal)
+	if !ok {
+		return InvalidClaims("`iss` must be string")
+	}
+	if err := validateIssClaim(req.App, iss); err == nil {
+		return err
+	}
+	expVal := req.Claims.Fields["exp"]
+	if expVal == nil {
+		return InvalidClaims("Missing claim `exp`")
+	}
+	exp, ok := pbValToTime(expVal)
+	if !ok {
+		return InvalidClaims("`exp` must be numeric")
+	}
+	nbfVal, ok := req.Claims.Fields["nbf"]
+	var nbf time.Time
+	if nbfVal != nil {
+		nbf, ok = pbValToTime(nbfVal)
+		if !ok {
+			return InvalidClaims("`nbf` must be numeric")
+		}
+	}
+	if err := validateExpNbfClaims(exp, nbf, now); err != nil {
+		return err
+	}
+	iatVal := req.Claims.Fields["iat"]
+	if iatVal != nil {
+		return InvalidClaims("Do not include `iat` in claims")
+	}
+	return nil
+}
+
+func (s *AppKeyStore) SignJwt(req *appkeypb.SignJwtRequest, logger *log.Logger) (*appkeypb.SignJwtResponse, error) {
+	if req.Algorithm != "RS256" {
+		return nil, UnsupportedSignatureAlgo(req.Algorithm)
+	}
+	now := time.Now().UTC()
+	err := s.validateClaims(req, now)
+	if err != nil {
+		logger.Printf("Claims are invalid: %s", err)
+		return nil, err
+	}
+	app, _, err := s.GetAppDoc(req.App)
+	if err != nil {
+		logger.Printf("Failed to get application document: %s", err)
+		return nil, err
+	}
+	rsaKey, fingerprint, err := s.anyKeyFromApp(app, logger)
+	if err != nil {
+		logger.Printf("Failed to get key for app %d: %s", req.App, err)
+		return nil, err
+	}
+	req.Claims.Fields["iss"] = &structpb.Value{
+		Kind: &structpb.Value_NumberValue{
+			NumberValue: timeToFloat(now),
+		},
+	}
+	req.Claims.Fields["com.mobettersoftware.iss-kid"] = &structpb.Value{
+		Kind: &structpb.Value_StringValue{
+			StringValue: fingerprint,
+		},
+	}
+	jsonMarshaler := jsonpb.Marshaler{
+		Indent: "",
+	}
+	claims, err := jsonMarshaler.MarshalToString(req.Claims)
+	if err != nil {
+		logger.Printf("Failed to marshal claims: %s", err)
+		return nil, err
+	}
+	claimsBytes := []byte(claims)
+	// sign with RSASSA-PKCS1-V1_5-SIGN using SHA-256
+	digest := sha256.Sum256(claimsBytes)
+	sig, err := rsa.SignPKCS1v15(nil, rsaKey, crypto.SHA256, digest[:])
+	if err != nil {
+		logger.Printf("Failed to sign claims data: %s", err)
+		return nil, err
+	}
+	resp := appkeypb.SignJwtResponse{
+		Claims:    claimsBytes,
+		Sig:       sig,
+		Algorithm: req.Algorithm,
 	}
 	return &resp, nil
 }
