@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 
@@ -129,6 +130,20 @@ func GetConfig(flags *flagValues, logger kslog.KsLogger) (*appkeypb.AppKeyManage
 	return &config, nil
 }
 
+type CheckFlagsFunc func(flagValues *flagValues) error
+
+func CheckAll(funcs ...CheckFlagsFunc) CheckFlagsFunc {
+	return func(flagValues *flagValues) error {
+		for _, checkFunc := range funcs {
+			err := checkFunc(flagValues)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
 func ValidateInitConfig(fv *flagValues) error {
 	if fv.IndexUrl == "" && fv.IndexBucket == "" && fv.IndexKey == "" {
 		return fmt.Errorf("Either --%s or both --%s and --%s must be used", FLAG_INDEX_URL, FLAG_INDEX_BUCKET, FLAG_INDEX_KEY)
@@ -140,6 +155,42 @@ func ValidateInitConfig(fv *flagValues) error {
 		return fmt.Errorf("--%s, --%s, and --%s must be used together", FLAG_INDEX_BUCKET, FLAG_INDEX_KEY, FLAG_AWS_REGION)
 	}
 	return nil
+}
+
+func ValidateFingerprint(fingerprint string) error {
+	validRunes := []rune{'1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'a', 'b', 'c', 'd', 'e', 'f', ':'}
+	for i, w := 0, 0; i < len(fingerprint); i += w {
+		runeVal, width := utf8.DecodeRuneInString(fingerprint[i:])
+		foundRune := false
+		for _, validRune := range validRunes {
+			if runeVal != validRune {
+				continue
+			}
+			foundRune = true
+			break
+		}
+		if !foundRune {
+			return fmt.Errorf("Found invalid character %c in fingerprint -%s", runeVal, FLAG_KEY)
+		}
+		w = width
+	}
+	parts := strings.Split(fingerprint, ":")
+	if len(parts) != 20 {
+		return fmt.Errorf("Fingerprint specified by -%s must be 20 octets, found %d", FLAG_KEY, len(parts))
+	}
+	for i, part := range parts {
+		if len(part) > 2 {
+			return fmt.Errorf("Fingerprint group %d (%s) is longer than one octet", i+1, part)
+		}
+		if len(part) < 2 {
+			return fmt.Errorf("Fingerprint group %d (%s) must be zero padded", i+1, part)
+		}
+	}
+	return nil
+}
+
+func ValidateKeySha1(fv *flagValues) error {
+	return ValidateFingerprint(fv.Key)
 }
 
 func (v *flagValues) ValidateDecimal(flag, text string) error {
@@ -399,7 +450,7 @@ func cmdRemoveApp(flagValues *flagValues, logger kslog.KsLogger) {
 type CmdSpec struct {
 	Flags         *flag.FlagSet
 	RequiredFlags []string
-	CheckFlags    func(flagValues *flagValues) error
+	CheckFlags    CheckFlagsFunc
 	CmdFunc       func(flagValues *flagValues, logger kslog.KsLogger)
 }
 
@@ -466,6 +517,7 @@ func SetupFlags(flags *flagValues) map[string]CmdSpec {
 	cmdSpecs[CMD_REM_KEY] = CmdSpec{
 		Flags:         removeKeyFlags,
 		RequiredFlags: []string{FLAG_CONFIG, FLAG_APP, FLAG_KEY},
+		CheckFlags:    ValidateKeySha1,
 		CmdFunc:       cmdRemoveKey,
 	}
 	remAppFlags := flag.NewFlagSet(CMD_REM_APP, flag.ExitOnError)
