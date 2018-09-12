@@ -501,7 +501,7 @@ func SetupFlags(flags *flagValues) map[string]CmdSpec {
 	addKeyFlags.StringVar(&flags.KeyFile, FLAG_KEY_FILE, "", "Key file name")
 	cmdSpecs[CMD_ADD_KEY] = CmdSpec{
 		Flags:         addKeyFlags,
-		RequiredFlags: []string{FLAG_CONFIG, FLAG_APP, FLAG_KEY},
+		RequiredFlags: []string{FLAG_CONFIG, FLAG_APP, FLAG_KEY_FILE},
 		CmdFunc:       cmdAddKey,
 	}
 	listKeysFlags := flag.NewFlagSet(CMD_LIST_KEYS, flag.ExitOnError)
