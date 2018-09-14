@@ -1,8 +1,8 @@
 package keyservice
 
 import (
-	"github.com/aefalcon-redux/github-keystore-protobuf/go/appkeypb"
-	"github.com/aefalcon-redux/go-github-keystore/kslog"
+	"github.com/aefalcon/github-keystore-protobuf/go/appkeypb"
+	"github.com/aefalcon/go-github-keystore/kslog"
 )
 
 type ManagerService interface {

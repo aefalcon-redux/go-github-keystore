@@ -9,11 +9,11 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/aefalcon-redux/github-keystore-protobuf/go/appkeypb"
-	"github.com/aefalcon-redux/go-github-keystore/docstore"
-	"github.com/aefalcon-redux/go-github-keystore/keyutils"
-	"github.com/aefalcon-redux/go-github-keystore/kslog"
-	"github.com/aefalcon-redux/go-github-keystore/s3docstore"
+	"github.com/aefalcon/github-keystore-protobuf/go/appkeypb"
+	"github.com/aefalcon/go-github-keystore/docstore"
+	"github.com/aefalcon/go-github-keystore/keyutils"
+	"github.com/aefalcon/go-github-keystore/kslog"
+	"github.com/aefalcon/go-github-keystore/s3docstore"
 	"github.com/golang/protobuf/jsonpb"
 )
 

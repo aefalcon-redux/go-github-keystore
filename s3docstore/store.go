@@ -7,8 +7,8 @@ import (
 	"path"
 	"time"
 
-	"github.com/aefalcon-redux/github-keystore-protobuf/go/appkeypb"
-	"github.com/aefalcon-redux/go-github-keystore/docstore"
+	"github.com/aefalcon/github-keystore-protobuf/go/appkeypb"
+	"github.com/aefalcon/go-github-keystore/docstore"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
