@@ -113,13 +113,21 @@ func TestAddApp(t *testing.T) {
 	logger := kslog.KsTestLogger{
 		TestLogger: t,
 	}
-	testAddAppWithId := func(appId uint64, t *testing.T) {
+	testAddAppWithId := func(shouldPass bool, appId uint64, t *testing.T) {
 		req := appkeypb.AddAppRequest{
 			App: appId,
 		}
 		_, err = keyStore.AddApp(&req, &logger)
-		if err != nil {
+		if err != nil && shouldPass {
 			t.Errorf("Failed to add app: %s", err)
+		} else if err != nil && !shouldPass {
+			// expected failure
+		} else if err == nil && !shouldPass {
+			t.Errorf("Test unexpectedly passed")
+		} else if err == nil && shouldPass {
+			// exected pass
+		} else {
+			panic("unexpected code path")
 		}
 	}
 	testSpecs := []struct {
@@ -139,14 +147,7 @@ func TestAddApp(t *testing.T) {
 			stateMsg = "fails"
 		}
 		testName := fmt.Sprintf("Add app %d %s", testSpec.appId, stateMsg)
-		testFunc := func(t *testing.T) { testAddAppWithId(testSpec.appId, t) }
-		testResult := t.Run(testName, testFunc)
-		if testResult != testSpec.shouldSucceed {
-			if testResult {
-				t.Fatalf("Test %s unexpectedly succeeded", testName)
-			} else {
-				t.Fatalf("Test %s unexpectedly failed", testName)
-			}
-		}
+		testFunc := func(t *testing.T) { testAddAppWithId(testSpec.shouldSucceed, testSpec.appId, t) }
+		t.Run(testName, testFunc)
 	}
 }
