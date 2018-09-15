@@ -92,6 +92,8 @@ func TestInitDb(t *testing.T) {
 }
 
 func TestAddApp(t *testing.T) {
+	client := setUpBucketTest(t)
+	defer tearDownBucketTest(client)
 	location := appkeypb.Location{
 		Location: &appkeypb.Location_S3{
 			S3: &appkeypb.S3Ref{
