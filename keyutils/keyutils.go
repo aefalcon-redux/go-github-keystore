@@ -74,8 +74,8 @@ func (e *BadOctetCount) Error() string {
 }
 
 type InvalidOctet struct {
-	Octet string
-	Pos  int
+	Octet   string
+	Pos     int
 	Message string
 }
 
