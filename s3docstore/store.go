@@ -2,8 +2,8 @@ package s3docstore
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
-	"log"
 	"path"
 	"time"
 
@@ -14,6 +14,60 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/golang/protobuf/proto"
 )
+
+type GetResourceError struct {
+	Name  string
+	Cause error
+}
+
+func (e *GetResourceError) Error() string {
+	return fmt.Sprintf("failed to get resource %s: %s", e.Name, e.Cause)
+}
+
+type PutResourceError struct {
+	Name  string
+	Cause error
+}
+
+func (e *PutResourceError) Error() string {
+	return fmt.Sprintf("failed to put resource %s: %s", e.Name, e.Cause)
+}
+
+type DeleteResourceError struct {
+	Name  string
+	Cause error
+}
+
+func (e *DeleteResourceError) Error() string {
+	return fmt.Sprintf("failed to delete resource %s: %s", e.Name, e.Cause)
+}
+
+type DecodeResourceError struct {
+	Name  string
+	Cause error
+}
+
+func (e *DecodeResourceError) Error() string {
+	return fmt.Sprintf("failed to decode resource %s: %s", e.Name, e.Cause)
+}
+
+type EncodeResourceError struct {
+	Name  string
+	Cause error
+}
+
+func (e *EncodeResourceError) Error() string {
+	return fmt.Sprintf("failed to encode resource %s: %s", e.Name, e.Cause)
+}
+
+type ReadResourceError struct {
+	Name  string
+	Cause error
+}
+
+func (e *ReadResourceError) Error() string {
+	return fmt.Sprintf("failed to decode resource %s: %s", e.Name, e.Cause)
+}
 
 type S3DocStore struct {
 	Client   *s3.S3
@@ -43,8 +97,11 @@ func (s *S3DocStore) GetDocument(name string, pb proto.Message) (*docstore.Cache
 	content, meta, err := s.GetDocumentRaw(name)
 	err = proto.Unmarshal(content, pb)
 	if err != nil {
-		log.Printf("Unable to unmarshal index: %s", err)
-		return nil, err
+		wrapErr := GetResourceError{
+			Name:  name,
+			Cause: err,
+		}
+		return nil, &wrapErr
 	}
 	return meta, nil
 }
@@ -57,14 +114,16 @@ func (s *S3DocStore) GetDocumentRaw(name string) ([]byte, *docstore.CacheMeta, e
 	}
 	result, err := s.Client.GetObject(&getInput)
 	if err != nil {
-		log.Fatalf("Unable to get index: %s", err)
 		return nil, nil, err
 	}
 	defer result.Body.Close()
 	content, err := ioutil.ReadAll(result.Body)
 	if err != nil {
-		log.Printf("Unable to read index: %s", err)
-		return nil, nil, err
+		wrapErr := ReadResourceError{
+			Name:  name,
+			Cause: err,
+		}
+		return nil, nil, &wrapErr
 	}
 	var cacheMeta docstore.CacheMeta
 	if result.CacheControl != nil {
@@ -76,11 +135,7 @@ func (s *S3DocStore) GetDocumentRaw(name string) ([]byte, *docstore.CacheMeta, e
 	if result.Expires != nil {
 		cacheMeta.Expires, err = time.Parse(time.RFC1123, *result.Expires)
 		if err != nil {
-			log.Printf("Failed to parse Expires as RFC1123, trying RFC1123Z")
 			cacheMeta.Expires, err = time.Parse(time.RFC1123Z, *result.Expires)
-		}
-		if err != nil {
-			log.Printf("Failed to parse Expires as RFC1123Z")
 		}
 	}
 	if result.LastModified != nil {
@@ -92,8 +147,11 @@ func (s *S3DocStore) GetDocumentRaw(name string) ([]byte, *docstore.CacheMeta, e
 func (s *S3DocStore) PutDocument(name string, pb proto.Message) (*docstore.CacheMeta, error) {
 	content, err := proto.Marshal(pb)
 	if err != nil {
-		log.Fatalf("Unable to marshal %T: %s", pb, err)
-		return nil, err
+		wrapErr := EncodeResourceError{
+			Name:  name,
+			Cause: err,
+		}
+		return nil, &wrapErr
 	}
 	return s.PutDocumentRaw(name, content)
 }
@@ -107,8 +165,11 @@ func (s *S3DocStore) PutDocumentRaw(name string, content []byte) (*docstore.Cach
 	}
 	result, err := s.Client.PutObject(&putInput)
 	if err != nil {
-		log.Printf("Unable to get index: %s", err)
-		return nil, err
+		wrapErr := PutResourceError{
+			Name:  name,
+			Cause: err,
+		}
+		return nil, &wrapErr
 	}
 	var cacheMeta docstore.CacheMeta
 	if result.ETag != nil {
@@ -125,8 +186,11 @@ func (s *S3DocStore) DeleteDocument(name string) (*docstore.CacheMeta, error) {
 	}
 	_, err := s.Client.DeleteObject(&input)
 	if err != nil {
-		log.Printf("Unable to get index: %s", err)
-		return nil, err
+		wrapErr := DeleteResourceError{
+			Name:  name,
+			Cause: err,
+		}
+		return nil, &wrapErr
 	}
 	return nil, err
 }
