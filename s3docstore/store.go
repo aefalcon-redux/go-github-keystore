@@ -2,7 +2,6 @@ package s3docstore
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"path"
 	"time"
@@ -14,60 +13,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/golang/protobuf/proto"
 )
-
-type GetResourceError struct {
-	Name  string
-	Cause error
-}
-
-func (e *GetResourceError) Error() string {
-	return fmt.Sprintf("failed to get resource %s: %s", e.Name, e.Cause)
-}
-
-type PutResourceError struct {
-	Name  string
-	Cause error
-}
-
-func (e *PutResourceError) Error() string {
-	return fmt.Sprintf("failed to put resource %s: %s", e.Name, e.Cause)
-}
-
-type DeleteResourceError struct {
-	Name  string
-	Cause error
-}
-
-func (e *DeleteResourceError) Error() string {
-	return fmt.Sprintf("failed to delete resource %s: %s", e.Name, e.Cause)
-}
-
-type DecodeResourceError struct {
-	Name  string
-	Cause error
-}
-
-func (e *DecodeResourceError) Error() string {
-	return fmt.Sprintf("failed to decode resource %s: %s", e.Name, e.Cause)
-}
-
-type EncodeResourceError struct {
-	Name  string
-	Cause error
-}
-
-func (e *EncodeResourceError) Error() string {
-	return fmt.Sprintf("failed to encode resource %s: %s", e.Name, e.Cause)
-}
-
-type ReadResourceError struct {
-	Name  string
-	Cause error
-}
-
-func (e *ReadResourceError) Error() string {
-	return fmt.Sprintf("failed to decode resource %s: %s", e.Name, e.Cause)
-}
 
 type S3DocStore struct {
 	Client   *s3.S3
@@ -96,7 +41,7 @@ func (s *S3DocStore) DocKey(name string) string {
 func (s *S3DocStore) GetDocument(name string, pb proto.Message) (*docstore.CacheMeta, error) {
 	content, meta, err := s.GetDocumentRaw(name)
 	if err != nil {
-		wrapErr := GetResourceError{
+		wrapErr := docstore.GetResourceError{
 			Name:  name,
 			Cause: err,
 		}
@@ -104,7 +49,7 @@ func (s *S3DocStore) GetDocument(name string, pb proto.Message) (*docstore.Cache
 	}
 	err = proto.Unmarshal(content, pb)
 	if err != nil {
-		wrapErr := DecodeResourceError{
+		wrapErr := docstore.DecodeResourceError{
 			Name:  name,
 			Cause: err,
 		}
@@ -126,7 +71,7 @@ func (s *S3DocStore) GetDocumentRaw(name string) ([]byte, *docstore.CacheMeta, e
 	defer result.Body.Close()
 	content, err := ioutil.ReadAll(result.Body)
 	if err != nil {
-		wrapErr := ReadResourceError{
+		wrapErr := docstore.ReadResourceError{
 			Name:  name,
 			Cause: err,
 		}
@@ -154,7 +99,7 @@ func (s *S3DocStore) GetDocumentRaw(name string) ([]byte, *docstore.CacheMeta, e
 func (s *S3DocStore) PutDocument(name string, pb proto.Message) (*docstore.CacheMeta, error) {
 	content, err := proto.Marshal(pb)
 	if err != nil {
-		wrapErr := EncodeResourceError{
+		wrapErr := docstore.EncodeResourceError{
 			Name:  name,
 			Cause: err,
 		}
@@ -172,7 +117,7 @@ func (s *S3DocStore) PutDocumentRaw(name string, content []byte) (*docstore.Cach
 	}
 	result, err := s.Client.PutObject(&putInput)
 	if err != nil {
-		wrapErr := PutResourceError{
+		wrapErr := docstore.PutResourceError{
 			Name:  name,
 			Cause: err,
 		}
@@ -193,7 +138,7 @@ func (s *S3DocStore) DeleteDocument(name string) (*docstore.CacheMeta, error) {
 	}
 	_, err := s.Client.DeleteObject(&input)
 	if err != nil {
-		wrapErr := DeleteResourceError{
+		wrapErr := docstore.DeleteResourceError{
 			Name:  name,
 			Cause: err,
 		}
