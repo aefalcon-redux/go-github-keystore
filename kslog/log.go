@@ -22,6 +22,7 @@ type TestLogger interface {
 
 type KsTestLogger struct {
 	TestLogger
+	FailOnError bool
 }
 
 var _ KsLogger = KsTestLogger{}
@@ -32,6 +33,22 @@ func (l KsTestLogger) Debug(args ...interface{}) {
 
 func (l KsTestLogger) Debugf(format string, args ...interface{}) {
 	TestLogger(l).Logf(format, args...)
+}
+
+func (l KsTestLogger) Error(args ...interface{}) {
+	if l.FailOnError {
+		TestLogger(l).Error(args...)
+	} else {
+		TestLogger(l).Log(args...)
+	}
+}
+
+func (l KsTestLogger) Errorf(format string, args ...interface{}) {
+	if l.FailOnError {
+		TestLogger(l).Errorf(format, args...)
+	} else {
+		TestLogger(l).Logf(format, args...)
+	}
 }
 
 type DefaultLogger struct{}
