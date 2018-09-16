@@ -83,7 +83,8 @@ func TestInitDb(t *testing.T) {
 		t.Fatalf("Failed to create doc store: %s", err)
 	}
 	logger := kslog.KsTestLogger{
-		TestLogger: t,
+		TestLogger:  t,
+		FailOnError: false,
 	}
 	err = keyStore.InitDb(&logger)
 	if err != nil {
