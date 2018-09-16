@@ -95,9 +95,16 @@ func (s *S3DocStore) DocKey(name string) string {
 
 func (s *S3DocStore) GetDocument(name string, pb proto.Message) (*docstore.CacheMeta, error) {
 	content, meta, err := s.GetDocumentRaw(name)
-	err = proto.Unmarshal(content, pb)
 	if err != nil {
 		wrapErr := GetResourceError{
+			Name:  name,
+			Cause: err,
+		}
+		return nil, &wrapErr
+	}
+	err = proto.Unmarshal(content, pb)
+	if err != nil {
+		wrapErr := DecodeResourceError{
 			Name:  name,
 			Cause: err,
 		}

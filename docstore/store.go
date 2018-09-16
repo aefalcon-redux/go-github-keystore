@@ -253,12 +253,17 @@ func (s *AppKeyStore) AddApp(req *appkeypb.AddAppRequest, logger kslog.KsLogger)
 }
 
 func (s *AppKeyStore) RemoveApp(req *appkeypb.RemoveAppRequest, logger kslog.KsLogger) (*appkeypb.RemoveAppResponse, error) {
+	if req.App == 0 {
+		logger.Errorf("Attempted to add app %d", req.App)
+		return nil, UnallowedAppId(req.App)
+	}
 	index, _, err := s.GetAppIndexDoc()
 	if err != nil {
+		logger.Errorf("failed to get app index: %s", err)
 		return nil, err
 	}
 	if _, found := index.AppRefs[req.App]; !found {
-		logger.Logf("Application %d not in index", req.App)
+		logger.Errorf("Application %d not in index", req.App)
 	} else {
 		delete(index.AppRefs, req.App)
 		_, err = s.PutAppIndexDoc(index)
@@ -270,8 +275,10 @@ func (s *AppKeyStore) RemoveApp(req *appkeypb.RemoveAppRequest, logger kslog.KsL
 	}
 	app, _, err := s.GetAppDoc(req.App)
 	if err != nil {
-		logger.Logf("Failed to get app %d: %s", req.App, err)
+		logger.Errorf("Failed to get app %d: %s", req.App, err)
 		return nil, err
+	} else {
+		logger.Logf("Fetched app document for %d", req.App)
 	}
 	_, err = s.DeleteAppDoc(req.App)
 	if err != nil {
@@ -280,6 +287,10 @@ func (s *AppKeyStore) RemoveApp(req *appkeypb.RemoveAppRequest, logger kslog.KsL
 	}
 	logger.Logf("Deleted application %d", req.App)
 	removeKeysOk := true
+	if len(app.Keys) == 0 {
+		logger.Logf("no keys to delete")
+		return &appkeypb.RemoveAppResponse{}, nil
+	}
 	for _, key := range app.Keys {
 		_, err = s.DeleteKeyMetaDoc(req.App, key.Meta.Fingerprint)
 		if err != nil {
