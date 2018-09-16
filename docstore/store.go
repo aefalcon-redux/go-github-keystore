@@ -12,6 +12,7 @@ import (
 	"github.com/aefalcon/go-github-keystore/keyservice"
 	"github.com/aefalcon/go-github-keystore/keyutils"
 	"github.com/aefalcon/go-github-keystore/kslog"
+	"github.com/aefalcon/go-github-keystore/timeutils"
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
 	structpb "github.com/golang/protobuf/ptypes/struct"
@@ -119,6 +120,15 @@ type InvalidClaims string
 
 func (e InvalidClaims) Error() string {
 	return string(e)
+}
+
+type FingerprintMismatch struct {
+	Given   string
+	Derived string
+}
+
+func (e *FingerprintMismatch) Error() string {
+	return fmt.Sprintf("derived fingerprint %s for key with stated fingerprint %s", e.Derived, e.Given)
 }
 
 type BlobStore interface {
@@ -350,6 +360,40 @@ func (s *AppKeyStore) AddApp(req *appkeypb.AddAppRequest, logger kslog.KsLogger)
 	}
 	app := appkeypb.App{
 		Id: req.App,
+	}
+	if len(req.Keys) > 0 {
+		app.Keys = make(map[string]*appkeypb.AppKeyIndexEntry, len(req.Keys))
+		for _, reqKey := range req.Keys {
+			rsaKey, err := keyutils.ParsePrivateKey(reqKey.Key)
+			if err != nil {
+				return nil, err
+			}
+			fingerprint, err := keyutils.KeyFingerprint(rsaKey)
+			if err != nil {
+				return nil, err
+			}
+			if reqKey.Meta.Fingerprint != fingerprint {
+				return nil, &FingerprintMismatch{
+					Given:   reqKey.Meta.Fingerprint,
+					Derived: fingerprint,
+				}
+			}
+			app.Keys[fingerprint] = &appkeypb.AppKeyIndexEntry{
+				Meta: reqKey.Meta,
+			}
+		}
+		for _, reqKey := range req.Keys {
+			_, err = s.PutKeyDoc(req.App, reqKey.Meta.Fingerprint, reqKey.Key)
+			if err != nil {
+				logger.Logf("Failed to put key document: %s", err)
+				return nil, err
+			}
+			_, err = s.PutKeyMetaDoc(reqKey.Meta)
+			if err != nil {
+				logger.Logf("Failed to put key metadata document: %s", err)
+				return nil, err
+			}
+		}
 	}
 	_, err = s.PutAppDoc(&app)
 	if err != nil {
@@ -601,20 +645,6 @@ func validateExpNbfClaims(exp, nbf, now time.Time) error {
 	return nil
 }
 
-func floatToTime(ts float64) time.Time {
-	seconds := int64(ts)
-	fraction := ts - float64(seconds)
-	nanos := int64(fraction * 1e9)
-	return time.Unix(seconds, nanos)
-}
-
-func timeToFloat(t time.Time) float64 {
-	unixNano := t.UnixNano()
-	floatT := float64(unixNano / int64(1e9))
-	floatT += float64(unixNano%1e9) / float64(1e9)
-	return floatT
-}
-
 func pbValToStr(v *structpb.Value) (string, bool) {
 	stringVal, ok := v.Kind.(*structpb.Value_StringValue)
 	if !ok {
@@ -636,7 +666,7 @@ func pbValToTime(v *structpb.Value) (time.Time, bool) {
 	if !ok {
 		return time.Time{}, false
 	}
-	return floatToTime(numTime), true
+	return timeutils.FloatToTime(numTime), true
 }
 
 func (s *AppKeyStore) validateClaims(req *appkeypb.SignJwtRequest, now time.Time) error {
@@ -697,12 +727,12 @@ func (s *AppKeyStore) SignJwt(req *appkeypb.SignJwtRequest, logger kslog.KsLogge
 		logger.Logf("Failed to get key for app %d: %s", req.App, err)
 		return nil, err
 	}
-	req.Claims.Fields["iss"] = &structpb.Value{
+	req.Claims.Fields["iat"] = &structpb.Value{
 		Kind: &structpb.Value_NumberValue{
-			NumberValue: timeToFloat(now),
+			NumberValue: timeutils.TimeToFloat(now),
 		},
 	}
-	req.Claims.Fields["com.mobettersoftware.iss-kid"] = &structpb.Value{
+	req.Claims.Fields["com.mobettersoftware.auth-kid"] = &structpb.Value{
 		Kind: &structpb.Value_StringValue{
 			StringValue: fingerprint,
 		},

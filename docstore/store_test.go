@@ -1,11 +1,19 @@
 package docstore
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/aefalcon/github-keystore-protobuf/go/appkeypb"
+	"github.com/aefalcon/go-github-keystore/keyutils"
 	"github.com/aefalcon/go-github-keystore/kslog"
+	"github.com/aefalcon/go-github-keystore/timeutils"
+	structpb "github.com/golang/protobuf/ptypes/struct"
 )
 
 var TestBucket string
@@ -134,4 +142,150 @@ func TestRemoveApp(t *testing.T) {
 		testFunc := func(t *testing.T) { testRemoveAppWithId(testSpec.shouldSucceed, testSpec.appId, t) }
 		t.Run(testName, testFunc)
 	}
+}
+
+func TestAddAppWithKey(t *testing.T) {
+	keyStore := NewMemKeyStore()
+	logger := kslog.KsTestLogger{
+		TestLogger: t,
+	}
+	err := keyStore.InitDb(&logger)
+	if err != nil {
+		t.Fatalf("Failed to initialize database: %s", err)
+	}
+	keyFileName := filepath.Join("testdata", "priv1.pem")
+	keyFile, err := os.Open(keyFileName)
+	if err != nil {
+		t.Fatalf("Failed to open file %s: %s", keyFileName, err)
+	}
+	keyBytes, err := ioutil.ReadAll(keyFile)
+	if err != nil {
+		t.Fatalf("Failed to read file %s: %s", keyFileName, err)
+	}
+	rsaKey, err := keyutils.ParsePrivateKey(keyBytes)
+	if err != nil {
+		t.Fatalf("Failed to parse key from file %s: %s", keyFileName, err)
+	}
+	fingerprint, err := keyutils.KeyFingerprint(rsaKey)
+	if err != nil {
+		t.Fatalf("Failed to derive fingerprint of key from fiel %s: %s", keyFileName, err)
+	}
+	const appId = 1
+	addReq := appkeypb.AddAppRequest{
+		App: uint64(appId),
+		Keys: []*appkeypb.AppKey{
+			&appkeypb.AppKey{
+				Key: keyBytes,
+				Meta: &appkeypb.AppKeyMeta{
+					Fingerprint: fingerprint,
+				},
+			},
+		},
+	}
+	_, err = keyStore.AddApp(&addReq, &logger)
+	if err != nil {
+		t.Fatalf("Failed to add app %d: %s", appId, err)
+	}
+	getAppReq := appkeypb.GetAppRequest{
+		App: uint64(appId),
+	}
+	appBack, err := keyStore.GetApp(&getAppReq, &logger)
+	if err != nil {
+		t.Fatalf("Failed to get app document back: %s", err)
+	}
+	if len(appBack.Keys) == 0 {
+		t.Fatal("No key on app")
+	}
+	if len(appBack.Keys) > 1 {
+		t.Fatal("app has more than one key")
+	}
+	var fingerprintBack string
+	for fingerprintBack = range appBack.Keys {
+	}
+	keyBack := appBack.Keys[fingerprintBack]
+	if fingerprintBack != fingerprint {
+		t.Fatalf("index fingerprint %s does not match expected fingerprint %s", fingerprintBack, fingerprint)
+	}
+	if keyBack.Meta.Fingerprint != fingerprint {
+		t.Fatalf("fingerprint %s does not match expected fingerprint %s", fingerprintBack, fingerprint)
+	}
+}
+
+func TestSignJwt(t *testing.T) {
+	keyStore := NewMemKeyStore()
+	logger := kslog.KsTestLogger{
+		TestLogger: t,
+	}
+	err := keyStore.InitDb(&logger)
+	if err != nil {
+		t.Fatalf("Failed to initialize database: %s", err)
+	}
+	keyFileName := filepath.Join("testdata", "priv1.pem")
+	keyFile, err := os.Open(keyFileName)
+	if err != nil {
+		t.Fatalf("Failed to open file %s: %s", keyFileName, err)
+	}
+	keyBytes, err := ioutil.ReadAll(keyFile)
+	if err != nil {
+		t.Fatalf("Failed to read file %s: %s", keyFileName, err)
+	}
+	rsaKey, err := keyutils.ParsePrivateKey(keyBytes)
+	if err != nil {
+		t.Fatalf("Failed to parse key from file %s: %s", keyFileName, err)
+	}
+	fingerprint, err := keyutils.KeyFingerprint(rsaKey)
+	if err != nil {
+		t.Fatalf("Failed to derive fingerprint of key from fiel %s: %s", keyFileName, err)
+	}
+	const appId = 1
+	addReq := appkeypb.AddAppRequest{
+		App: uint64(appId),
+		Keys: []*appkeypb.AppKey{
+			&appkeypb.AppKey{
+				Key: keyBytes,
+				Meta: &appkeypb.AppKeyMeta{
+					Fingerprint: fingerprint,
+				},
+			},
+		},
+	}
+	_, err = keyStore.AddApp(&addReq, &logger)
+	if err != nil {
+		t.Fatalf("Failed to add app %d: %s", appId, err)
+	}
+	now := time.Now().UTC()
+	signReq := appkeypb.SignJwtRequest{
+		App:       appId,
+		Algorithm: "RS256",
+		Claims: &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				"iss": &structpb.Value{
+					Kind: &structpb.Value_StringValue{
+						StringValue: fmt.Sprintf("%d", appId),
+					},
+				},
+				"exp": &structpb.Value{
+					Kind: &structpb.Value_NumberValue{
+						NumberValue: timeutils.TimeToFloat(now),
+					},
+				},
+			},
+		},
+	}
+	jwtResp, err := keyStore.SignJwt(&signReq, logger)
+	if err != nil {
+		t.Fatalf("Failed to sign JWT: %s", err)
+	}
+	if jwtResp.Claims == nil {
+		t.Fatalf("response has no claims")
+	}
+	if jwtResp.Sig == nil {
+		t.Fatalf("response has no signature")
+	}
+	claims := make(map[string]interface{})
+	err = json.Unmarshal(jwtResp.Claims, &claims)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal claims %s: %s", string(jwtResp.Claims), err)
+	}
+	t.Logf("issued claims %s", string(jwtResp.Claims))
 }
