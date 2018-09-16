@@ -35,10 +35,33 @@ func createTestBucket(client *s3.S3) error {
 }
 
 func deleteTestBucket(client *s3.S3) error {
+	listObjectsInput := s3.ListObjectsInput{
+		Bucket: &TestBucket,
+	}
+	listObjectsResult, err := client.ListObjects(&listObjectsInput)
+	if err != nil {
+		return err
+	}
+	deleteObjects := make([]*s3.ObjectIdentifier, len(listObjectsResult.Contents))
+	for i := range listObjectsResult.Contents {
+		deleteObjects[i] = &s3.ObjectIdentifier{
+			Key: listObjectsResult.Contents[i].Key,
+		}
+	}
+	deleteObjectsInput := s3.DeleteObjectsInput{
+		Bucket: &TestBucket,
+		Delete: &s3.Delete{
+			Objects: deleteObjects,
+		},
+	}
+	_, err = client.DeleteObjects(&deleteObjectsInput)
+	if err != nil {
+		return err
+	}
 	input := s3.DeleteBucketInput{
 		Bucket: &TestBucket,
 	}
-	_, err := client.DeleteBucket(&input)
+	_, err = client.DeleteBucket(&input)
 	return err
 }
 
@@ -59,13 +82,17 @@ func setUpBucketTest(t *testing.T) *s3.S3 {
 	return client
 }
 
-func tearDownBucketTest(client *s3.S3) error {
-	return deleteTestBucket(client)
+func tearDownBucketTest(t *testing.T, client *s3.S3) error {
+	err := deleteTestBucket(client)
+	if err != nil {
+		t.Logf("Failed to delete bucket: %s", err)
+	}
+	return err
 }
 
 func TestInitDb(t *testing.T) {
 	client := setUpBucketTest(t)
-	defer tearDownBucketTest(client)
+	defer tearDownBucketTest(t, client)
 	location := appkeypb.Location{
 		Location: &appkeypb.Location_S3{
 			S3: &appkeypb.S3Ref{
@@ -94,7 +121,7 @@ func TestInitDb(t *testing.T) {
 
 func TestAddApp(t *testing.T) {
 	client := setUpBucketTest(t)
-	defer tearDownBucketTest(client)
+	defer tearDownBucketTest(t, client)
 	location := appkeypb.Location{
 		Location: &appkeypb.Location_S3{
 			S3: &appkeypb.S3Ref{
@@ -113,6 +140,10 @@ func TestAddApp(t *testing.T) {
 	}
 	logger := kslog.KsTestLogger{
 		TestLogger: t,
+	}
+	err = keyStore.InitDb(&logger)
+	if err != nil {
+		t.Fatalf("Failed to initialize database: %s", err)
 	}
 	testAddAppWithId := func(shouldPass bool, appId uint64, t *testing.T) {
 		req := appkeypb.AddAppRequest{
