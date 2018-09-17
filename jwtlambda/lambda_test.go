@@ -87,7 +87,7 @@ func TestSignJwt(t *testing.T) {
 				},
 				"exp": &structpb.Value{
 					Kind: &structpb.Value_NumberValue{
-						NumberValue: timeutils.TimeToFloat(now.Add(time.Hour)),
+						NumberValue: float64(int64(timeutils.TimeToFloat(now.Add(time.Minute * 10)))),
 					},
 				},
 			},

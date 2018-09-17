@@ -733,7 +733,7 @@ func (s *AppKeyStore) SignJwt(req *appkeypb.SignJwtRequest, logger kslog.KsLogge
 	}
 	req.Claims.Fields["iat"] = &structpb.Value{
 		Kind: &structpb.Value_NumberValue{
-			NumberValue: timeutils.TimeToFloat(now),
+			NumberValue: float64(int64(timeutils.TimeToFloat(now))),
 		},
 	}
 	req.Claims.Fields["com.mobettersoftware.auth-kid"] = &structpb.Value{

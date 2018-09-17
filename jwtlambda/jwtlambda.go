@@ -20,8 +20,7 @@ type LambdaSignJwtRequest struct {
 
 func (r *LambdaSignJwtRequest) UnmarshalJSON(data []byte) error {
 	dataReader := bytes.NewReader(data)
-	jsonpb.Unmarshal(dataReader, &r.SignJwtRequest)
-	return nil
+	return jsonpb.Unmarshal(dataReader, &r.SignJwtRequest)
 }
 
 func HandleRequest(store *docstore.AppKeyStore, ctx context.Context, req *LambdaSignJwtRequest) (string, error) {
