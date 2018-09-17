@@ -499,34 +499,36 @@ func (s *AppKeyStore) AddKey(req *appkeypb.AddKeyRequest, logger kslog.KsLogger)
 		logger.Logf("Failed to get app %d: %s", req.App, err)
 		return nil, err
 	}
+	logger.Logf("Adding %d keys", len(req.Keys))
 	if len(app.Keys) == 0 {
 		app.Keys = make(map[string]*appkeypb.AppKeyIndexEntry)
-		for _, key := range req.Keys {
-			key.Meta.App = req.App
-			app.Keys[key.Meta.Fingerprint] = &appkeypb.AppKeyIndexEntry{
-				Meta: key.Meta,
-			}
+	}
+	keysToAdd := make([]*appkeypb.AppKey, 0, len(req.Keys))
+	for _, key := range req.Keys {
+		if _, found := app.Keys[key.Meta.Fingerprint]; found {
+			logger.Logf("App %d already has key %s", req.App, key.Meta.Fingerprint)
+			continue
 		}
-	} else {
-		for _, key := range req.Keys {
-			if _, found := app.Keys[key.Meta.Fingerprint]; found {
-				logger.Logf("App %d already has key %s", req.App, key.Meta.Fingerprint)
-			}
-			key.Meta.App = req.App
-			app.Keys[key.Meta.Fingerprint] = &appkeypb.AppKeyIndexEntry{
-				Meta: key.Meta,
-			}
-			_, err = s.PutKeyDoc(req.App, key.Meta.Fingerprint, key.Key)
-			if err != nil {
-				logger.Logf("Failed to put key document: %s", err)
-				return nil, err
-			}
-			_, err = s.PutKeyMetaDoc(key.Meta)
-			if err != nil {
-				logger.Logf("Failed to put key metadata document: %s", err)
-				return nil, err
-			}
+		key.Meta.App = req.App
+		app.Keys[key.Meta.Fingerprint] = &appkeypb.AppKeyIndexEntry{
+			Meta: key.Meta,
 		}
+		keysToAdd = append(keysToAdd, key)
+	}
+	for _, key := range keysToAdd {
+		logger.Logf("Adding key %s", key.Meta.Fingerprint)
+		_, err = s.PutKeyDoc(req.App, key.Meta.Fingerprint, key.Key)
+		if err != nil {
+			logger.Logf("Failed to put key document: %s", err)
+			return nil, err
+		}
+		logger.Logf("Added key %s", key.Meta.Fingerprint)
+		_, err = s.PutKeyMetaDoc(key.Meta)
+		if err != nil {
+			logger.Logf("Failed to put key metadata document: %s", err)
+			return nil, err
+		}
+		logger.Logf("Added key metadata for %s", key.Meta.Fingerprint)
 	}
 	_, err = s.PutAppDoc(app)
 	if err != nil {

@@ -150,7 +150,7 @@ func ValidateInitConfig(fv *flagValues) error {
 	if fv.IndexUrl != "" && (fv.IndexBucket != "" || fv.IndexKey != "") {
 		return fmt.Errorf("--%s cannot be used with --%s or --%s", FLAG_INDEX_URL, FLAG_INDEX_BUCKET, FLAG_INDEX_KEY)
 	}
-	if fv.IndexUrl == "" && (fv.IndexBucket == "" || fv.IndexKey == "" || fv.AwsRegion == "") {
+	if fv.IndexUrl == "" && (fv.IndexBucket == "" || fv.AwsRegion == "") {
 		return fmt.Errorf("--%s, --%s, and --%s must be used together", FLAG_INDEX_BUCKET, FLAG_INDEX_KEY, FLAG_AWS_REGION)
 	}
 	return nil
