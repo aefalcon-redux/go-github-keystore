@@ -1,4 +1,4 @@
-package s3docstore
+package s3store
 
 import (
 	"bytes"
@@ -11,54 +11,33 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/golang/protobuf/proto"
 )
 
-type S3DocStore struct {
+type S3BlobStore struct {
 	Client   *s3.S3
 	Location appkeypb.S3Ref
 }
 
-var _ docstore.DocStore = &S3DocStore{}
+var _ docstore.BlobStore = &S3BlobStore{}
 
-func NewS3DocStore(loc *appkeypb.Location) (*S3DocStore, error) {
+func NewS3BlobStore(loc *appkeypb.Location) (*S3BlobStore, error) {
 	loc_s3loc, ok := loc.Location.(*appkeypb.Location_S3)
 	if !ok {
 		return nil, (*docstore.UnsupportedLocation)(loc)
 	}
 	sess := session.Must(session.NewSession())
 	client := s3.New(sess, aws.NewConfig().WithRegion(loc_s3loc.S3.Region))
-	return &S3DocStore{
+	return &S3BlobStore{
 		Client:   client,
 		Location: *loc_s3loc.S3,
 	}, nil
 }
 
-func (s *S3DocStore) DocKey(name string) string {
+func (s *S3BlobStore) DocKey(name string) string {
 	return path.Join(s.Location.Key, name)
 }
 
-func (s *S3DocStore) GetDocument(name string, pb proto.Message) (*docstore.CacheMeta, error) {
-	content, meta, err := s.GetDocumentRaw(name)
-	if err != nil {
-		wrapErr := docstore.GetResourceError{
-			Name:  name,
-			Cause: err,
-		}
-		return nil, &wrapErr
-	}
-	err = proto.Unmarshal(content, pb)
-	if err != nil {
-		wrapErr := docstore.DecodeResourceError{
-			Name:  name,
-			Cause: err,
-		}
-		return nil, &wrapErr
-	}
-	return meta, nil
-}
-
-func (s *S3DocStore) GetDocumentRaw(name string) ([]byte, *docstore.CacheMeta, error) {
+func (s *S3BlobStore) GetDocumentRaw(name string) ([]byte, *docstore.CacheMeta, error) {
 	key := s.DocKey(name)
 	getInput := s3.GetObjectInput{
 		Bucket: &s.Location.Bucket,
@@ -96,19 +75,7 @@ func (s *S3DocStore) GetDocumentRaw(name string) ([]byte, *docstore.CacheMeta, e
 	return content, &cacheMeta, nil
 }
 
-func (s *S3DocStore) PutDocument(name string, pb proto.Message) (*docstore.CacheMeta, error) {
-	content, err := proto.Marshal(pb)
-	if err != nil {
-		wrapErr := docstore.EncodeResourceError{
-			Name:  name,
-			Cause: err,
-		}
-		return nil, &wrapErr
-	}
-	return s.PutDocumentRaw(name, content)
-}
-
-func (s *S3DocStore) PutDocumentRaw(name string, content []byte) (*docstore.CacheMeta, error) {
+func (s *S3BlobStore) PutDocumentRaw(name string, content []byte) (*docstore.CacheMeta, error) {
 	key := s.DocKey(name)
 	putInput := s3.PutObjectInput{
 		Bucket: &s.Location.Bucket,
@@ -130,7 +97,7 @@ func (s *S3DocStore) PutDocumentRaw(name string, content []byte) (*docstore.Cach
 	return &cacheMeta, err
 }
 
-func (s *S3DocStore) DeleteDocument(name string) (*docstore.CacheMeta, error) {
+func (s *S3BlobStore) DeleteDocument(name string) (*docstore.CacheMeta, error) {
 	key := s.DocKey(name)
 	input := s3.DeleteObjectInput{
 		Bucket: &s.Location.Bucket,

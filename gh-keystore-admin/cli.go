@@ -13,7 +13,7 @@ import (
 	"github.com/aefalcon/go-github-keystore/docstore"
 	"github.com/aefalcon/go-github-keystore/keyutils"
 	"github.com/aefalcon/go-github-keystore/kslog"
-	"github.com/aefalcon/go-github-keystore/s3docstore"
+	"github.com/aefalcon/go-github-keystore/s3store"
 	"github.com/golang/protobuf/jsonpb"
 )
 
@@ -96,15 +96,15 @@ func MakeStore(config *appkeypb.AppKeyManagerConfig, links *appkeypb.Links) (*do
 	if links == nil {
 		links = &appkeypb.DefaultLinks
 	}
-	docStore, err := s3docstore.NewS3DocStore(config.DbLoc)
+	blobStore, err := s3store.NewS3BlobStore(config.DbLoc)
 	if err != nil {
 		return nil, err
 	}
-	store := docstore.AppKeyStore{
-		DocStore: docStore,
-		Links:    *links,
+	docStore := docstore.BlobDocStore{
+		BlobStore: blobStore,
 	}
-	return &store, nil
+	store := docstore.NewAppKeyStore(&docStore, links)
+	return store, nil
 }
 
 func GetConfig(flags *flagValues, logger kslog.KsLogger) (*appkeypb.AppKeyManagerConfig, error) {

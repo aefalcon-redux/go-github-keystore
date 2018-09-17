@@ -1,4 +1,4 @@
-package s3docstore
+package s3store
 
 import (
 	"flag"
