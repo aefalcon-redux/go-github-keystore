@@ -1,11 +1,15 @@
 package docstore
 
 import (
-	"encoding/json"
+	"crypto"
+	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -266,7 +270,7 @@ func TestSignJwt(t *testing.T) {
 				},
 				"exp": &structpb.Value{
 					Kind: &structpb.Value_NumberValue{
-						NumberValue: timeutils.TimeToFloat(now),
+						NumberValue: timeutils.TimeToFloat(now.Add(time.Hour)),
 					},
 				},
 			},
@@ -276,16 +280,18 @@ func TestSignJwt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to sign JWT: %s", err)
 	}
-	if jwtResp.Claims == nil {
-		t.Fatalf("response has no claims")
+	if jwtResp.Jwt == "" {
+		t.Fatalf("response has no JWT")
 	}
-	if jwtResp.Sig == nil {
-		t.Fatalf("response has no signature")
-	}
-	claims := make(map[string]interface{})
-	err = json.Unmarshal(jwtResp.Claims, &claims)
+	t.Logf("issued JWT %s", string(jwtResp.Jwt))
+	secureData64 := jwtResp.Jwt[:strings.LastIndex(jwtResp.Jwt, ".")]
+	sig64 := jwtResp.Jwt[len(secureData64)+1:]
+	sig := make([]byte, base64.RawURLEncoding.DecodedLen(len(sig64)))
+	base64.RawURLEncoding.Decode(sig, []byte(sig64))
+	digest := sha256.Sum256([]byte(secureData64))
+	err = rsa.VerifyPKCS1v15(rsaKey.Public().(*rsa.PublicKey), crypto.SHA256, digest[:], sig)
 	if err != nil {
-		t.Fatalf("Failed to unmarshal claims %s: %s", string(jwtResp.Claims), err)
+		t.Fatalf("Failed to verify signature: %s", err)
 	}
-	t.Logf("issued claims %s", string(jwtResp.Claims))
+	t.Log("signiture verifies")
 }

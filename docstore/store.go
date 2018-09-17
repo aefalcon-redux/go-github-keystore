@@ -4,6 +4,8 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -714,17 +716,17 @@ func (s *AppKeyStore) SignJwt(req *appkeypb.SignJwtRequest, logger kslog.KsLogge
 	now := time.Now().UTC()
 	err := s.validateClaims(req, now)
 	if err != nil {
-		logger.Logf("Claims are invalid: %s", err)
+		logger.Errorf("Claims are invalid: %s", err)
 		return nil, err
 	}
 	app, _, err := s.GetAppDoc(req.App)
 	if err != nil {
-		logger.Logf("Failed to get application document: %s", err)
+		logger.Errorf("Failed to get application document: %s", err)
 		return nil, err
 	}
 	rsaKey, fingerprint, err := s.anyKeyFromApp(app, logger)
 	if err != nil {
-		logger.Logf("Failed to get key for app %d: %s", req.App, err)
+		logger.Errorf("Failed to get key for app %d: %s", req.App, err)
 		return nil, err
 	}
 	req.Claims.Fields["iat"] = &structpb.Value{
@@ -742,21 +744,37 @@ func (s *AppKeyStore) SignJwt(req *appkeypb.SignJwtRequest, logger kslog.KsLogge
 	}
 	claims, err := jsonMarshaler.MarshalToString(req.Claims)
 	if err != nil {
-		logger.Logf("Failed to marshal claims: %s", err)
+		logger.Errorf("Failed to marshal claims: %s", err)
 		return nil, err
 	}
-	claimsBytes := []byte(claims)
+	claims64 := make([]byte, base64.RawURLEncoding.EncodedLen(len(claims)))
+	base64.RawURLEncoding.Encode(claims64, []byte(claims))
+	header, err := json.Marshal(map[string]interface{}{
+		"typ": "JWT",
+		"alg": req.Algorithm,
+	})
+	if err != nil {
+		logger.Errorf("Failed to marshal header: %s", err)
+	}
+	header64 := make([]byte, base64.RawURLEncoding.EncodedLen(len(header)))
+	base64.RawURLEncoding.Encode(header64, []byte(header))
+	secureData := make([]byte, len(claims64)+len(header64)+1)
+	copy(secureData, header64)
+	secureData[len(header64)] = '.'
+	copy(secureData[len(header64)+1:], claims64)
 	// sign with RSASSA-PKCS1-V1_5-SIGN using SHA-256
-	digest := sha256.Sum256(claimsBytes)
+	digest := sha256.Sum256(secureData)
 	sig, err := rsa.SignPKCS1v15(nil, rsaKey, crypto.SHA256, digest[:])
 	if err != nil {
 		logger.Logf("Failed to sign claims data: %s", err)
 		return nil, err
 	}
+	token := make([]byte, len(secureData)+1+base64.RawURLEncoding.EncodedLen(len(sig)))
+	copy(token, secureData)
+	token[len(secureData)] = '.'
+	base64.RawURLEncoding.Encode(token[len(secureData)+1:], sig[:])
 	resp := appkeypb.SignJwtResponse{
-		Claims:    claimsBytes,
-		Sig:       sig,
-		Algorithm: req.Algorithm,
+		Jwt: string(token),
 	}
 	return &resp, nil
 }
