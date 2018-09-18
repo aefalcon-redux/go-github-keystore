@@ -121,51 +121,81 @@ type InstallTokenService struct {
 	InstallTokenProvider
 }
 
+func (s *InstallTokenService) installTokenIsValid(tokenDoc *tokenpb.InstallToken, logger kslog.KsLogger) bool {
+	expiration, err := ptypes.Timestamp(tokenDoc.Expiration)
+	if err != nil {
+		logger.Errorf("Failed to parse fetched install token's expiration: %s", err)
+		return false
+	}
+	now := time.Now()
+	if now.After(expiration) {
+		logger.Errorf("Fetched install token is expired")
+		return false
+	}
+	return true
+}
+
+func (s *InstallTokenService) appTokenIsValid(tokenDoc *tokenpb.AppToken, logger kslog.KsLogger) bool {
+	expiration, err := ptypes.Timestamp(tokenDoc.Expiration)
+	if err != nil {
+		logger.Errorf("Failed to parse fetched app token's expiration: %s", err)
+		return false
+	}
+	now := time.Now()
+	if now.After(expiration) {
+		logger.Errorf("Fetched app token is expired")
+		return false
+	}
+	return true
+}
+
+func (s *InstallTokenService) getNewAppToken(app uint64, logger kslog.KsLogger) (*tokenpb.AppToken, error) {
+	token, expiration, err := s.AppTokenProvider(app)
+	if err != nil {
+		logger.Errorf("Failed to get new token for app %d: %s", app, err)
+		return nil, err
+	}
+	pbexp, err := ptypes.TimestampProto(expiration)
+	if err != nil {
+		logger.Errorf("Failed to convert expiration %v of new app token to pb time", expiration, err)
+		return nil, err
+	}
+	appTokenDoc := &tokenpb.AppToken{
+		App:        app,
+		Token:      token,
+		Expiration: pbexp,
+	}
+	_, err = s.PutAppTokenDoc(appTokenDoc)
+	if err != nil {
+		logger.Errorf("Failed to put app token: %s", err)
+	}
+	return appTokenDoc, nil
+}
+
 func (s *InstallTokenService) GetInstallToken(req tokenpb.GetInstallTokenRequest, logger kslog.KsLogger) (*tokenpb.GetInstallTokenResponse, error) {
 	if req.App == 0 {
 		logger.Errorf("Attempted to add app %d", req.App)
 		return nil, UnallowedAppId(req.App)
 	}
 	installTokenDoc, _, err := s.GetInstallTokenDoc(req.App, req.Install)
-	if err == nil {
-		expiration, err := ptypes.Timestamp(installTokenDoc.Expiration)
-		if err == nil {
-			now := time.Now()
-			if now.Before(expiration) {
-				resp := tokenpb.GetInstallTokenResponse{
-					Token: installTokenDoc,
-				}
-				return &resp, nil
-			}
-			logger.Logf("Fetched token for app %d and install %d is expired", req.App, req.Install)
-		} else {
-			logger.Errorf("Error fetching token for app %d install %d: %s", req.App, req.Install)
+	if err == nil && s.installTokenIsValid(installTokenDoc, logger) {
+		resp := tokenpb.GetInstallTokenResponse{
+			Token: installTokenDoc,
 		}
+		return &resp, nil
 	}
 	appTokenDoc, _, err := s.GetAppTokenDoc(req.App)
 	if err != nil {
 		logger.Errorf("Failed to get app %d token doc: %s", req.App, err)
 		appTokenDoc = nil
 	}
+	if appTokenDoc != nil && !s.appTokenIsValid(appTokenDoc, logger) {
+		appTokenDoc = nil
+	}
 	if appTokenDoc == nil {
-		appToken, expiration, err := s.AppTokenProvider(req.App)
+		appTokenDoc, err = s.getNewAppToken(req.App, logger)
 		if err != nil {
-			logger.Errorf("Failed to get new token for app %d: %s", req.App, err)
 			return nil, err
-		}
-		pbexp, err := ptypes.TimestampProto(expiration)
-		if err != nil {
-			logger.Errorf("Failed to convert expiration %v to pb time", expiration, err)
-		} else {
-			appTokenDoc := &tokenpb.AppToken{
-				App:        req.App,
-				Token:      appToken,
-				Expiration: pbexp,
-			}
-			_, err = s.PutAppTokenDoc(appTokenDoc)
-			if err != nil {
-				logger.Errorf("Failed to put app token: %s", err)
-			}
 		}
 	}
 	installToken, expiration, err := s.AppTokenProvider(req.App)
