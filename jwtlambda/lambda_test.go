@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/aefalcon/github-keystore-protobuf/go/appkeypb"
+	"github.com/aefalcon/go-github-keystore/appkeystore"
 	"github.com/aefalcon/go-github-keystore/docstore"
 	"github.com/aefalcon/go-github-keystore/keyutils"
 	"github.com/aefalcon/go-github-keystore/kslog"
@@ -24,12 +25,12 @@ import (
 	structpb "github.com/golang/protobuf/ptypes/struct"
 )
 
-func NewMemKeyStore() *docstore.AppKeyStore {
+func NewMemKeyStore() *appkeystore.AppKeyStore {
 	blobStore := docstore.NewMemBlobStore()
 	docStore := docstore.BlobDocStore{
 		BlobStore: blobStore,
 	}
-	return docstore.NewAppKeyStore(&docStore, nil)
+	return appkeystore.NewAppKeyStore(&docStore, nil)
 }
 
 func TestSignJwt(t *testing.T) {

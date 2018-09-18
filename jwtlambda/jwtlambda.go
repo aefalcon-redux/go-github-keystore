@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/aefalcon/github-keystore-protobuf/go/appkeypb"
+	"github.com/aefalcon/go-github-keystore/appkeystore"
 	"github.com/aefalcon/go-github-keystore/docstore"
 	"github.com/aefalcon/go-github-keystore/kslog"
 	"github.com/aefalcon/go-github-keystore/s3store"
@@ -23,7 +24,7 @@ func (r *LambdaSignJwtRequest) UnmarshalJSON(data []byte) error {
 	return jsonpb.Unmarshal(dataReader, &r.SignJwtRequest)
 }
 
-func HandleRequest(store *docstore.AppKeyStore, ctx context.Context, req *LambdaSignJwtRequest) (string, error) {
+func HandleRequest(store *appkeystore.AppKeyStore, ctx context.Context, req *LambdaSignJwtRequest) (string, error) {
 	logger := kslog.DefaultLogger{}
 	reply, err := store.SignJwt(&req.SignJwtRequest, logger)
 	if err != nil {
@@ -53,7 +54,7 @@ func main() {
 	docStore := docstore.BlobDocStore{
 		BlobStore: blobStore,
 	}
-	keyStore := docstore.NewAppKeyStore(&docStore, nil)
+	keyStore := appkeystore.NewAppKeyStore(&docStore, nil)
 	handleFunc := func(ctx context.Context, req *LambdaSignJwtRequest) (string, error) {
 		return HandleRequest(keyStore, ctx, req)
 	}

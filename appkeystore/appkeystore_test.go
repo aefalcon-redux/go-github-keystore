@@ -1,4 +1,4 @@
-package docstore
+package appkeystore
 
 import (
 	"crypto"
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/aefalcon/github-keystore-protobuf/go/appkeypb"
+	"github.com/aefalcon/go-github-keystore/docstore"
 	"github.com/aefalcon/go-github-keystore/keyutils"
 	"github.com/aefalcon/go-github-keystore/kslog"
 	"github.com/aefalcon/go-github-keystore/timeutils"
@@ -24,8 +25,8 @@ var TestBucket string
 var TestRegion string
 
 func NewMemKeyStore() *AppKeyStore {
-	blobStore := NewMemBlobStore()
-	docStore := BlobDocStore{
+	blobStore := docstore.NewMemBlobStore()
+	docStore := docstore.BlobDocStore{
 		BlobStore: blobStore,
 	}
 	return NewAppKeyStore(&docStore, nil)

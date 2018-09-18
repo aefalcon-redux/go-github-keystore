@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/aefalcon/github-keystore-protobuf/go/appkeypb"
+	"github.com/aefalcon/go-github-keystore/appkeystore"
 	"github.com/aefalcon/go-github-keystore/docstore"
 	"github.com/aefalcon/go-github-keystore/keyutils"
 	"github.com/aefalcon/go-github-keystore/kslog"
@@ -92,7 +93,7 @@ func (v *flagValues) Require(flags ...string) error {
 	return nil
 }
 
-func MakeStore(config *appkeypb.AppKeyManagerConfig, links *appkeypb.Links) (*docstore.AppKeyStore, error) {
+func MakeStore(config *appkeypb.AppKeyManagerConfig, links *appkeypb.Links) (*appkeystore.AppKeyStore, error) {
 	if links == nil {
 		links = &appkeypb.DefaultLinks
 	}
@@ -103,7 +104,7 @@ func MakeStore(config *appkeypb.AppKeyManagerConfig, links *appkeypb.Links) (*do
 	docStore := docstore.BlobDocStore{
 		BlobStore: blobStore,
 	}
-	store := docstore.NewAppKeyStore(&docStore, links)
+	store := appkeystore.NewAppKeyStore(&docStore, links)
 	return store, nil
 }
 
