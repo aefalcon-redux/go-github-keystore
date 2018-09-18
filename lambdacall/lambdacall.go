@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/aefalcon/github-keystore-protobuf/go/appkeypb"
+	"github.com/aefalcon/github-keystore-protobuf/go/tokenpb"
 	"github.com/aefalcon/go-github-keystore/kslog"
 	"github.com/aws/aws-sdk-go/service/lambda"
 	"github.com/golang/protobuf/jsonpb"
@@ -29,6 +30,17 @@ func CallPbLambda(svc *lambda.Lambda, funcName string, in, out proto.Message) er
 		return fmt.Errorf("Failed to unmarshal %s: %s", string(invokeOutput.Payload), err)
 	}
 	return nil
+}
+
+type LambdaInstallKeyService struct {
+	Service  *lambda.Lambda
+	FuncName string
+}
+
+func (s *LambdaInstallKeyService) GetInstallToken(req *tokenpb.GetInstallTokenRequest, logger kslog.KsLogger) (*tokenpb.GetInstallTokenResponse, error) {
+	var resp tokenpb.GetInstallTokenResponse
+	err := CallPbLambda(s.Service, s.FuncName, req, &resp)
+	return &resp, err
 }
 
 type LambdaSigningService struct {
