@@ -26,20 +26,13 @@ type TokenDocStore struct {
 }
 
 func NewTokenDocStore(store docstore.DocStore, links *tokenpb.Links) *TokenDocStore {
-	// TODO: add default links to tokenpb
-	//if links == nil {
-	//	links = &tokenpb.DefaultLinks
-	//}
+	if links == nil {
+		links = &tokenpb.DefaultLinks
+	}
 	return &TokenDocStore{
 		DocStore: store,
 		Links:    *links,
 	}
-}
-
-func (s *TokenDocStore) InitDb(logger kslog.KsLogger) error {
-	// This is a Noop at the moment
-	// TODO: remove or not?
-	return nil
 }
 
 func (s *TokenDocStore) AppTokenName(app uint64) (string, error) {
