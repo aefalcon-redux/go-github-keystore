@@ -12,7 +12,7 @@ import (
 )
 
 type AppTokenProvider func(app uint64) ([]byte, time.Time, error)
-type InstallTokenProvider func(app, install uint8) ([]byte, time.Time, error)
+type InstallTokenProvider func(app, install uint64) ([]byte, time.Time, error)
 
 type UnallowedAppId uint64
 
@@ -109,7 +109,7 @@ func (s *TokenDocStore) DeleteInstallTokenDoc(app, install uint64) (*docstore.Ca
 }
 
 type InstallTokenService struct {
-	TokenDocStore
+	*TokenDocStore
 	AppTokenProvider
 	InstallTokenProvider
 }
@@ -165,7 +165,7 @@ func (s *InstallTokenService) getNewAppToken(app uint64, logger kslog.KsLogger) 
 	return appTokenDoc, nil
 }
 
-func (s *InstallTokenService) GetInstallToken(req tokenpb.GetInstallTokenRequest, logger kslog.KsLogger) (*tokenpb.GetInstallTokenResponse, error) {
+func (s *InstallTokenService) GetInstallToken(req *tokenpb.GetInstallTokenRequest, logger kslog.KsLogger) (*tokenpb.GetInstallTokenResponse, error) {
 	if req.App == 0 {
 		logger.Errorf("Attempted to add app %d", req.App)
 		return nil, UnallowedAppId(req.App)
