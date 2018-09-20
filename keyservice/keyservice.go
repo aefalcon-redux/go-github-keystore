@@ -15,6 +15,5 @@ type ManagerService interface {
 }
 
 type SigningService interface {
-	Sign(*appkeypb.SignRequest, kslog.KsLogger) (*appkeypb.SignedData, error)
 	SignJwt(*appkeypb.SignJwtRequest, kslog.KsLogger) (*appkeypb.SignJwtResponse, error)
 }

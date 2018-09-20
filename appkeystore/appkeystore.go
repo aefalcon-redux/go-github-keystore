@@ -473,35 +473,6 @@ func (s *AppKeyStore) anyKeyFromApp(app *appkeypb.App, logger kslog.KsLogger) (*
 	return rsaKey, fingerprint, nil
 }
 
-func (s *AppKeyStore) Sign(req *appkeypb.SignRequest, logger kslog.KsLogger) (*appkeypb.SignedData, error) {
-	if req.Algorithm != "RS256" {
-		return nil, UnsupportedSignatureAlgo(req.Algorithm)
-	}
-	// sign with RSASSA-PKCS1-V1_5-SIGN using SHA-256
-	app, _, err := s.GetAppDoc(req.App)
-	if err != nil {
-		logger.Logf("Failed to get application document: %s", err)
-		return nil, err
-	}
-	rsaKey, fingerprint, err := s.anyKeyFromApp(app, logger)
-	if err != nil {
-		logger.Logf("Failed to get key for app %d: %s", req.App, err)
-		return nil, err
-	}
-	digest := sha256.Sum256(req.ProtectedData)
-	sig, err := rsa.SignPKCS1v15(nil, rsaKey, crypto.SHA256, digest[:])
-	if err != nil {
-		logger.Logf("Failed to sign protected data: %s", err)
-		return nil, err
-	}
-	resp := appkeypb.SignedData{
-		Signature:          sig,
-		Algorithm:          req.Algorithm,
-		SigningFingerprint: fingerprint,
-	}
-	return &resp, nil
-}
-
 func validateIssClaim(app uint64, iss string) error {
 	issAsInt, err := strconv.ParseUint(iss, 10, 64)
 	if err != nil {
