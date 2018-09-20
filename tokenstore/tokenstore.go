@@ -1,4 +1,4 @@
-package TokenDocStore
+package tokenstore
 
 import (
 	"fmt"
