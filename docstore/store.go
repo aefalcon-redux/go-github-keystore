@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aefalcon/github-keystore-protobuf/go/appkeypb"
+	"github.com/aefalcon/github-keystore-protobuf/go/locationpb"
 	"github.com/golang/protobuf/proto"
 )
 
@@ -75,10 +75,10 @@ type CacheMeta struct {
 	LastModified time.Time
 }
 
-type UnsupportedLocation appkeypb.Location
+type UnsupportedLocation locationpb.Location
 
 func (e *UnsupportedLocation) Error() string {
-	return fmt.Sprintf("Ref type %T is not supported", (*appkeypb.Location)(e))
+	return fmt.Sprintf("Ref type %T is not supported", (*locationpb.Location)(e))
 }
 
 type BlobStore interface {

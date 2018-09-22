@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/aefalcon/github-keystore-protobuf/go/appkeypb"
+	"github.com/aefalcon/github-keystore-protobuf/go/locationpb"
 	"github.com/aefalcon/go-github-keystore/appkeystore"
 	"github.com/aefalcon/go-github-keystore/docstore"
 	"github.com/aefalcon/go-github-keystore/keyutils"
@@ -194,15 +195,15 @@ func cmdInitDb(flagValues *flagValues, logger kslog.KsLogger) {
 
 func cmdInitConfig(flagValues *flagValues, logger kslog.KsLogger) {
 	config := appkeypb.AppKeyManagerConfig{
-		DbLoc: &appkeypb.Location{},
+		DbLoc: &locationpb.Location{},
 	}
 	if flagValues.IndexUrl != "" {
-		config.DbLoc.Location = &appkeypb.Location_Url{
+		config.DbLoc.Location = &locationpb.Location_Url{
 			Url: flagValues.IndexUrl,
 		}
 	} else {
-		config.DbLoc.Location = &appkeypb.Location_S3{
-			S3: &appkeypb.S3Ref{
+		config.DbLoc.Location = &locationpb.Location_S3{
+			S3: &locationpb.S3Ref{
 				Bucket: flagValues.IndexBucket,
 				Key:    flagValues.IndexKey,
 				Region: flagValues.AwsRegion,

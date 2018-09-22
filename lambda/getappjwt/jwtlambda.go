@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/aefalcon/github-keystore-protobuf/go/appkeypb"
+	"github.com/aefalcon/github-keystore-protobuf/go/locationpb"
 	"github.com/aefalcon/go-github-keystore/appkeystore"
 	"github.com/aefalcon/go-github-keystore/docstore"
 	"github.com/aefalcon/go-github-keystore/kslog"
@@ -38,9 +39,9 @@ func main() {
 	storeBucket := os.Getenv("STORE_BUCKET")
 	storePrefix := os.Getenv("STORE_PREFIX")
 	storeRegion := os.Getenv("STORE_REGION")
-	location := appkeypb.Location{
-		Location: &appkeypb.Location_S3{
-			S3: &appkeypb.S3Ref{
+	location := locationpb.Location{
+		Location: &locationpb.Location_S3{
+			S3: &locationpb.S3Ref{
 				Bucket: storeBucket,
 				Key:    storePrefix,
 				Region: storeRegion,

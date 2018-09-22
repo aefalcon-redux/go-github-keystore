@@ -6,7 +6,7 @@ import (
 	"path"
 	"time"
 
-	"github.com/aefalcon/github-keystore-protobuf/go/appkeypb"
+	"github.com/aefalcon/github-keystore-protobuf/go/locationpb"
 	"github.com/aefalcon/go-github-keystore/docstore"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -15,13 +15,13 @@ import (
 
 type S3BlobStore struct {
 	Client   *s3.S3
-	Location appkeypb.S3Ref
+	Location locationpb.S3Ref
 }
 
 var _ docstore.BlobStore = &S3BlobStore{}
 
-func NewS3BlobStore(loc *appkeypb.Location) (*S3BlobStore, error) {
-	loc_s3loc, ok := loc.Location.(*appkeypb.Location_S3)
+func NewS3BlobStore(loc *locationpb.Location) (*S3BlobStore, error) {
+	loc_s3loc, ok := loc.Location.(*locationpb.Location_S3)
 	if !ok {
 		return nil, (*docstore.UnsupportedLocation)(loc)
 	}
