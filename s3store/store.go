@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/aefalcon/github-keystore-protobuf/go/locationpb"
-	"github.com/aefalcon/go-github-keystore/docstore"
+	"github.com/aefalcon/go-github-keystore/messagestore"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -18,12 +18,12 @@ type S3BlobStore struct {
 	Location locationpb.S3Ref
 }
 
-var _ docstore.BlobStore = &S3BlobStore{}
+var _ messagestore.BlobStore = &S3BlobStore{}
 
 func NewS3BlobStore(loc *locationpb.Location) (*S3BlobStore, error) {
 	loc_s3loc, ok := loc.Location.(*locationpb.Location_S3)
 	if !ok {
-		return nil, (*docstore.UnsupportedLocation)(loc)
+		return nil, (*messagestore.UnsupportedLocation)(loc)
 	}
 	sess := session.Must(session.NewSession())
 	client := s3.New(sess, aws.NewConfig().WithRegion(loc_s3loc.S3.Region))
@@ -37,7 +37,7 @@ func (s *S3BlobStore) DocKey(name string) string {
 	return path.Join(s.Location.Key, name)
 }
 
-func (s *S3BlobStore) GetDocumentRaw(name string) ([]byte, *docstore.CacheMeta, error) {
+func (s *S3BlobStore) GetBlob(name string) ([]byte, *messagestore.CacheMeta, error) {
 	key := s.DocKey(name)
 	getInput := s3.GetObjectInput{
 		Bucket: &s.Location.Bucket,
@@ -50,13 +50,13 @@ func (s *S3BlobStore) GetDocumentRaw(name string) ([]byte, *docstore.CacheMeta, 
 	defer result.Body.Close()
 	content, err := ioutil.ReadAll(result.Body)
 	if err != nil {
-		wrapErr := docstore.ReadResourceError{
+		wrapErr := messagestore.ReadResourceError{
 			Name:  name,
 			Cause: err,
 		}
 		return nil, nil, &wrapErr
 	}
-	var cacheMeta docstore.CacheMeta
+	var cacheMeta messagestore.CacheMeta
 	if result.CacheControl != nil {
 		cacheMeta.CacheControl = *result.CacheControl
 	}
@@ -75,7 +75,7 @@ func (s *S3BlobStore) GetDocumentRaw(name string) ([]byte, *docstore.CacheMeta, 
 	return content, &cacheMeta, nil
 }
 
-func (s *S3BlobStore) PutDocumentRaw(name string, content []byte) (*docstore.CacheMeta, error) {
+func (s *S3BlobStore) PutBlob(name string, content []byte) (*messagestore.CacheMeta, error) {
 	key := s.DocKey(name)
 	putInput := s3.PutObjectInput{
 		Bucket: &s.Location.Bucket,
@@ -84,20 +84,20 @@ func (s *S3BlobStore) PutDocumentRaw(name string, content []byte) (*docstore.Cac
 	}
 	result, err := s.Client.PutObject(&putInput)
 	if err != nil {
-		wrapErr := docstore.PutResourceError{
+		wrapErr := messagestore.PutResourceError{
 			Name:  name,
 			Cause: err,
 		}
 		return nil, &wrapErr
 	}
-	var cacheMeta docstore.CacheMeta
+	var cacheMeta messagestore.CacheMeta
 	if result.ETag != nil {
 		cacheMeta.ETag = *result.ETag
 	}
 	return &cacheMeta, err
 }
 
-func (s *S3BlobStore) DeleteDocument(name string) (*docstore.CacheMeta, error) {
+func (s *S3BlobStore) DeleteBlob(name string) (*messagestore.CacheMeta, error) {
 	key := s.DocKey(name)
 	input := s3.DeleteObjectInput{
 		Bucket: &s.Location.Bucket,
@@ -105,7 +105,7 @@ func (s *S3BlobStore) DeleteDocument(name string) (*docstore.CacheMeta, error) {
 	}
 	_, err := s.Client.DeleteObject(&input)
 	if err != nil {
-		wrapErr := docstore.DeleteResourceError{
+		wrapErr := messagestore.DeleteResourceError{
 			Name:  name,
 			Cause: err,
 		}

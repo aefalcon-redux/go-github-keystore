@@ -17,17 +17,17 @@ import (
 
 	"github.com/aefalcon/github-keystore-protobuf/go/appkeypb"
 	"github.com/aefalcon/go-github-keystore/appkeystore"
-	"github.com/aefalcon/go-github-keystore/docstore"
 	"github.com/aefalcon/go-github-keystore/keyutils"
 	"github.com/aefalcon/go-github-keystore/kslog"
+	"github.com/aefalcon/go-github-keystore/messagestore"
 	"github.com/aefalcon/go-github-keystore/timeutils"
 	"github.com/golang/protobuf/jsonpb"
 	structpb "github.com/golang/protobuf/ptypes/struct"
 )
 
 func NewMemKeyStore() *appkeystore.AppKeyStore {
-	blobStore := docstore.NewMemBlobStore()
-	docStore := docstore.BlobDocStore{
+	blobStore := messagestore.NewMemBlobStore()
+	docStore := messagestore.BlobMessageStore{
 		BlobStore: blobStore,
 	}
 	return appkeystore.NewAppKeyStore(&docStore, nil)

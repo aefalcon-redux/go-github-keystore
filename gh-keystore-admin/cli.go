@@ -12,9 +12,9 @@ import (
 	"github.com/aefalcon/github-keystore-protobuf/go/appkeypb"
 	"github.com/aefalcon/github-keystore-protobuf/go/locationpb"
 	"github.com/aefalcon/go-github-keystore/appkeystore"
-	"github.com/aefalcon/go-github-keystore/docstore"
 	"github.com/aefalcon/go-github-keystore/keyutils"
 	"github.com/aefalcon/go-github-keystore/kslog"
+	"github.com/aefalcon/go-github-keystore/messagestore"
 	"github.com/aefalcon/go-github-keystore/s3store"
 	"github.com/golang/protobuf/jsonpb"
 )
@@ -102,7 +102,7 @@ func MakeStore(config *appkeypb.AppKeyManagerConfig, links *appkeypb.Links) (*ap
 	if err != nil {
 		return nil, err
 	}
-	docStore := docstore.BlobDocStore{
+	docStore := messagestore.BlobMessageStore{
 		BlobStore: blobStore,
 	}
 	store := appkeystore.NewAppKeyStore(&docStore, links)

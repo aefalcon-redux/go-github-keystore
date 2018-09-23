@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/aefalcon/github-keystore-protobuf/go/appkeypb"
-	"github.com/aefalcon/go-github-keystore/docstore"
 	"github.com/aefalcon/go-github-keystore/keyservice"
 	"github.com/aefalcon/go-github-keystore/keyutils"
 	"github.com/aefalcon/go-github-keystore/kslog"
+	"github.com/aefalcon/go-github-keystore/messagestore"
 	"github.com/aefalcon/go-github-keystore/timeutils"
 	"github.com/golang/protobuf/jsonpb"
 	structpb "github.com/golang/protobuf/ptypes/struct"
@@ -60,21 +60,26 @@ func (e *FingerprintMismatch) Error() string {
 	return fmt.Sprintf("derived fingerprint %s for key with stated fingerprint %s", e.Derived, e.Given)
 }
 
+type StoreBackend interface {
+	messagestore.BlobStore
+	messagestore.MessageStore
+}
+
 type AppKeyStore struct {
-	DocStore docstore.DocStore
-	Links    appkeypb.Links
+	StoreBackend
+	Links appkeypb.Links
 }
 
 var _ keyservice.ManagerService = &AppKeyStore{}
 var _ keyservice.SigningService = &AppKeyStore{}
 
-func NewAppKeyStore(store docstore.DocStore, links *appkeypb.Links) *AppKeyStore {
+func NewAppKeyStore(store StoreBackend, links *appkeypb.Links) *AppKeyStore {
 	if links == nil {
 		links = &appkeypb.DefaultLinks
 	}
 	return &AppKeyStore{
-		DocStore: store,
-		Links:    *links,
+		StoreBackend: store,
+		Links:        *links,
 	}
 }
 
@@ -95,30 +100,30 @@ func (s *AppKeyStore) AppIndexName() (string, error) {
 	return uritmpl.Expand(map[string]interface{}{})
 }
 
-func (s *AppKeyStore) GetAppIndexDoc() (*appkeypb.AppIndex, *docstore.CacheMeta, error) {
+func (s *AppKeyStore) GetAppIndexDoc() (*appkeypb.AppIndex, *messagestore.CacheMeta, error) {
 	docName, err := s.AppIndexName()
 	if err != nil {
 		return nil, nil, err
 	}
 	var index appkeypb.AppIndex
-	meta, err := s.DocStore.GetDocument(docName, &index)
+	meta, err := s.GetMessage(docName, &index)
 	return &index, meta, err
 }
 
-func (s *AppKeyStore) PutAppIndexDoc(index *appkeypb.AppIndex) (*docstore.CacheMeta, error) {
+func (s *AppKeyStore) PutAppIndexDoc(index *appkeypb.AppIndex) (*messagestore.CacheMeta, error) {
 	docName, err := s.AppIndexName()
 	if err != nil {
 		return nil, err
 	}
-	return s.DocStore.PutDocument(docName, index)
+	return s.PutMessage(docName, index)
 }
 
-func (s *AppKeyStore) DeleteAppIndexDoc() (*docstore.CacheMeta, error) {
+func (s *AppKeyStore) DeleteAppIndexDoc() (*messagestore.CacheMeta, error) {
 	docName, err := s.AppIndexName()
 	if err != nil {
 		return nil, err
 	}
-	return s.DocStore.DeleteDocument(docName)
+	return s.DeleteMessage(docName)
 }
 
 func (s *AppKeyStore) AppName(appId uint64) (string, error) {
@@ -129,30 +134,30 @@ func (s *AppKeyStore) AppName(appId uint64) (string, error) {
 	return uritmpl.Expand(map[string]interface{}{"AppId": appId})
 }
 
-func (s *AppKeyStore) GetAppDoc(appId uint64) (*appkeypb.App, *docstore.CacheMeta, error) {
+func (s *AppKeyStore) GetAppDoc(appId uint64) (*appkeypb.App, *messagestore.CacheMeta, error) {
 	docName, err := s.AppName(appId)
 	if err != nil {
 		return nil, nil, err
 	}
 	var app appkeypb.App
-	meta, err := s.DocStore.GetDocument(docName, &app)
+	meta, err := s.GetMessage(docName, &app)
 	return &app, meta, err
 }
 
-func (s *AppKeyStore) PutAppDoc(app *appkeypb.App) (*docstore.CacheMeta, error) {
+func (s *AppKeyStore) PutAppDoc(app *appkeypb.App) (*messagestore.CacheMeta, error) {
 	docName, err := s.AppName(app.Id)
 	if err != nil {
 		return nil, err
 	}
-	return s.DocStore.PutDocument(docName, app)
+	return s.PutMessage(docName, app)
 }
 
-func (s *AppKeyStore) DeleteAppDoc(appId uint64) (*docstore.CacheMeta, error) {
+func (s *AppKeyStore) DeleteAppDoc(appId uint64) (*messagestore.CacheMeta, error) {
 	docName, err := s.AppName(appId)
 	if err != nil {
 		return nil, err
 	}
-	return s.DocStore.DeleteDocument(docName)
+	return s.DeleteMessage(docName)
 }
 
 func (s *AppKeyStore) KeyName(appId uint64, fingerprint string) (string, error) {
@@ -163,28 +168,28 @@ func (s *AppKeyStore) KeyName(appId uint64, fingerprint string) (string, error) 
 	return uritmpl.Expand(map[string]interface{}{"AppId": appId, "Fingerprint": fingerprint})
 }
 
-func (s *AppKeyStore) GetKeyDoc(appId uint64, fingerprint string) ([]byte, *docstore.CacheMeta, error) {
+func (s *AppKeyStore) GetKeyDoc(appId uint64, fingerprint string) ([]byte, *messagestore.CacheMeta, error) {
 	docName, err := s.KeyName(appId, fingerprint)
 	if err != nil {
 		return nil, nil, err
 	}
-	return s.DocStore.GetDocumentRaw(docName)
+	return s.GetBlob(docName)
 }
 
-func (s *AppKeyStore) PutKeyDoc(app uint64, fingerprint string, key []byte) (*docstore.CacheMeta, error) {
+func (s *AppKeyStore) PutKeyDoc(app uint64, fingerprint string, key []byte) (*messagestore.CacheMeta, error) {
 	docName, err := s.KeyName(app, fingerprint)
 	if err != nil {
 		return nil, err
 	}
-	return s.DocStore.PutDocumentRaw(docName, key)
+	return s.PutBlob(docName, key)
 }
 
-func (s *AppKeyStore) DeleteKeyDoc(appId uint64, fingerprint string) (*docstore.CacheMeta, error) {
+func (s *AppKeyStore) DeleteKeyDoc(appId uint64, fingerprint string) (*messagestore.CacheMeta, error) {
 	docName, err := s.KeyName(appId, fingerprint)
 	if err != nil {
 		return nil, err
 	}
-	return s.DocStore.DeleteDocument(docName)
+	return s.DeleteBlob(docName)
 }
 
 func (s *AppKeyStore) KeyMetaName(appId uint64, fingerprint string) (string, error) {
@@ -195,30 +200,30 @@ func (s *AppKeyStore) KeyMetaName(appId uint64, fingerprint string) (string, err
 	return uritmpl.Expand(map[string]interface{}{"AppId": appId, "Fingerprint": fingerprint})
 }
 
-func (s *AppKeyStore) GetKeyMetaDoc(appId uint64, fingerprint string) (*appkeypb.AppKeyMeta, *docstore.CacheMeta, error) {
+func (s *AppKeyStore) GetKeyMetaDoc(appId uint64, fingerprint string) (*appkeypb.AppKeyMeta, *messagestore.CacheMeta, error) {
 	docName, err := s.KeyMetaName(appId, fingerprint)
 	if err != nil {
 		return nil, nil, err
 	}
 	var appMeta appkeypb.AppKeyMeta
-	cacheMeta, err := s.DocStore.GetDocument(docName, &appMeta)
+	cacheMeta, err := s.GetMessage(docName, &appMeta)
 	return &appMeta, cacheMeta, err
 }
 
-func (s *AppKeyStore) PutKeyMetaDoc(keyMeta *appkeypb.AppKeyMeta) (*docstore.CacheMeta, error) {
+func (s *AppKeyStore) PutKeyMetaDoc(keyMeta *appkeypb.AppKeyMeta) (*messagestore.CacheMeta, error) {
 	docName, err := s.KeyMetaName(keyMeta.App, keyMeta.Fingerprint)
 	if err != nil {
 		return nil, err
 	}
-	return s.DocStore.PutDocument(docName, keyMeta)
+	return s.PutMessage(docName, keyMeta)
 }
 
-func (s *AppKeyStore) DeleteKeyMetaDoc(appId uint64, fingerprint string) (*docstore.CacheMeta, error) {
+func (s *AppKeyStore) DeleteKeyMetaDoc(appId uint64, fingerprint string) (*messagestore.CacheMeta, error) {
 	docName, err := s.KeyMetaName(appId, fingerprint)
 	if err != nil {
 		return nil, err
 	}
-	return s.DocStore.DeleteDocument(docName)
+	return s.DeleteBlob(docName)
 }
 
 func (s *AppKeyStore) AddApp(req *appkeypb.AddAppRequest, logger kslog.KsLogger) (*appkeypb.AddAppResponse, error) {
