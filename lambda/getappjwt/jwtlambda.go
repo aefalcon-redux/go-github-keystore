@@ -25,14 +25,28 @@ func (r *LambdaSignJwtRequest) UnmarshalJSON(data []byte) error {
 	return jsonpb.Unmarshal(dataReader, &r.SignJwtRequest)
 }
 
-func HandleRequest(service *appkeystore.AppKeyService, ctx context.Context, req *LambdaSignJwtRequest) (string, error) {
-	logger := kslog.DefaultLogger{}
-	reply, err := service.SignJwt(&req.SignJwtRequest, logger)
-	if err != nil {
-		return "", err
-	}
+type LambdaSignJwtResponse struct {
+	appkeypb.SignJwtResponse
+}
+
+func (r *LambdaSignJwtResponse) MarshalJSON() ([]byte, error) {
 	marshaler := jsonpb.Marshaler{}
-	return marshaler.MarshalToString(reply)
+	buffer := bytes.NewBuffer(nil)
+	err := marshaler.Marshal(buffer, &r.SignJwtResponse)
+	if err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
+func HandleRequest(service *appkeystore.AppKeyService, ctx context.Context, req *LambdaSignJwtRequest) (*LambdaSignJwtResponse, error) {
+	logger := kslog.DefaultLogger{}
+	resp, err := service.SignJwt(&req.SignJwtRequest, logger)
+	if err != nil {
+		return nil, err
+	}
+	reply := LambdaSignJwtResponse{*resp}
+	return &reply, nil
 }
 
 func main() {
@@ -56,7 +70,7 @@ func main() {
 		BlobStore: blobStore,
 	}
 	keyService := appkeystore.NewAppKeyService(&docStore, nil)
-	handleFunc := func(ctx context.Context, req *LambdaSignJwtRequest) (string, error) {
+	handleFunc := func(ctx context.Context, req *LambdaSignJwtRequest) (*LambdaSignJwtResponse, error) {
 		return HandleRequest(keyService, ctx, req)
 	}
 	lambda.Start(handleFunc)

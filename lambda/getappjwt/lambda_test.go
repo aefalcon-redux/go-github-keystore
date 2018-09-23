@@ -109,17 +109,12 @@ func TestSignJwt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("handler failure: %s", err)
 	}
-	var jwtResp appkeypb.SignJwtResponse
-	err = jsonpb.UnmarshalString(resp, &jwtResp)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal json response: %s", err)
-	}
-	if jwtResp.Jwt == "" {
+	if resp.Jwt == "" {
 		t.Fatalf("response has no JWT")
 	}
-	t.Logf("issued JWT %s", string(jwtResp.Jwt))
-	secureData64 := jwtResp.Jwt[:strings.LastIndex(jwtResp.Jwt, ".")]
-	sig64 := jwtResp.Jwt[len(secureData64)+1:]
+	t.Logf("issued JWT %s", string(resp.Jwt))
+	secureData64 := resp.Jwt[:strings.LastIndex(resp.Jwt, ".")]
+	sig64 := resp.Jwt[len(secureData64)+1:]
 	sig := make([]byte, base64.RawURLEncoding.DecodedLen(len(sig64)))
 	base64.RawURLEncoding.Decode(sig, []byte(sig64))
 	digest := sha256.Sum256([]byte(secureData64))
