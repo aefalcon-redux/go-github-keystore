@@ -27,10 +27,10 @@ import (
 
 func NewTestKeyService() *appkeystore.AppKeyService {
 	blobStore := messagestore.NewMemBlobStore()
-	docStore := messagestore.BlobMessageStore{
+	messageStore := messagestore.BlobMessageStore{
 		BlobStore: blobStore,
 	}
-	return appkeystore.NewAppKeyService(&docStore, nil)
+	return appkeystore.NewAppKeyService(&messageStore, nil)
 }
 
 func TestSignJwt(t *testing.T) {

@@ -102,10 +102,10 @@ func MakeKeyService(config *appkeypb.AppKeyManagerConfig, links *appkeypb.Links)
 	if err != nil {
 		return nil, err
 	}
-	docStore := messagestore.BlobMessageStore{
+	messageStore := messagestore.BlobMessageStore{
 		BlobStore: blobStore,
 	}
-	service := appkeystore.NewAppKeyService(&docStore, links)
+	service := appkeystore.NewAppKeyService(&messageStore, links)
 	return service, nil
 }
 

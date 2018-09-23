@@ -66,10 +66,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create store: %s", err)
 	}
-	docStore := messagestore.BlobMessageStore{
+	messageStore := messagestore.BlobMessageStore{
 		BlobStore: blobStore,
 	}
-	keyService := appkeystore.NewAppKeyService(&docStore, nil)
+	keyService := appkeystore.NewAppKeyService(&messageStore, nil)
 	handleFunc := func(ctx context.Context, req *LambdaSignJwtRequest) (*LambdaSignJwtResponse, error) {
 		return HandleRequest(keyService, ctx, req)
 	}
