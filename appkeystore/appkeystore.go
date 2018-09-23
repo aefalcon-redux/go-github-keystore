@@ -147,6 +147,7 @@ func (s *AppKeyStore) keyName(appId uint64, fingerprint string) (string, error) 
 	return uritmpl.Expand(map[string]interface{}{"AppId": appId, "Fingerprint": fingerprint})
 }
 
+// GetKey loads the key for a specified app given the key's finger print.
 func (s *AppKeyStore) GetKey(appId uint64, fingerprint string) ([]byte, *messagestore.CacheMeta, error) {
 	name, err := s.keyName(appId, fingerprint)
 	if err != nil {
@@ -155,6 +156,7 @@ func (s *AppKeyStore) GetKey(appId uint64, fingerprint string) ([]byte, *message
 	return s.GetBlob(name)
 }
 
+// PutKey stores a key for an app using a specified fingerprint.
 func (s *AppKeyStore) PutKey(app uint64, fingerprint string, key []byte) (*messagestore.CacheMeta, error) {
 	name, err := s.keyName(app, fingerprint)
 	if err != nil {
@@ -163,6 +165,7 @@ func (s *AppKeyStore) PutKey(app uint64, fingerprint string, key []byte) (*messa
 	return s.PutBlob(name, key)
 }
 
+// DeleteKey removes the key specified by fingerprint from an app
 func (s *AppKeyStore) DeleteKey(appId uint64, fingerprint string) (*messagestore.CacheMeta, error) {
 	name, err := s.keyName(appId, fingerprint)
 	if err != nil {
@@ -171,7 +174,9 @@ func (s *AppKeyStore) DeleteKey(appId uint64, fingerprint string) (*messagestore
 	return s.DeleteBlob(name)
 }
 
-func (s *AppKeyStore) KeyMetaName(appId uint64, fingerprint string) (string, error) {
+// kyeMetaName gets the name used to reference an RSA key metadata for
+// a particular RSA key and application
+func (s *AppKeyStore) keyMetaName(appId uint64, fingerprint string) (string, error) {
 	uritmpl, err := uritemplates.Parse(s.Links.KeyMeta)
 	if err != nil {
 		return "", err
@@ -179,8 +184,9 @@ func (s *AppKeyStore) KeyMetaName(appId uint64, fingerprint string) (string, err
 	return uritmpl.Expand(map[string]interface{}{"AppId": appId, "Fingerprint": fingerprint})
 }
 
+// GetKeyMeta fetches key metadata for an applications key, identified by fingerprint
 func (s *AppKeyStore) GetKeyMeta(appId uint64, fingerprint string) (*appkeypb.AppKeyMeta, *messagestore.CacheMeta, error) {
-	name, err := s.KeyMetaName(appId, fingerprint)
+	name, err := s.keyMetaName(appId, fingerprint)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -189,35 +195,43 @@ func (s *AppKeyStore) GetKeyMeta(appId uint64, fingerprint string) (*appkeypb.Ap
 	return &appMeta, cacheMeta, err
 }
 
+// PutKeyMeta creates or replaces a keys metadta
 func (s *AppKeyStore) PutKeyMeta(keyMeta *appkeypb.AppKeyMeta) (*messagestore.CacheMeta, error) {
-	name, err := s.KeyMetaName(keyMeta.App, keyMeta.Fingerprint)
+	name, err := s.keyMetaName(keyMeta.App, keyMeta.Fingerprint)
 	if err != nil {
 		return nil, err
 	}
 	return s.PutMessage(name, keyMeta)
 }
 
+// DeleteKeyMeta removes the metadata for a specified key
 func (s *AppKeyStore) DeleteKeyMeta(appId uint64, fingerprint string) (*messagestore.CacheMeta, error) {
-	name, err := s.KeyMetaName(appId, fingerprint)
+	name, err := s.keyMetaName(appId, fingerprint)
 	if err != nil {
 		return nil, err
 	}
 	return s.DeleteBlob(name)
 }
 
+// AppKeyService performs high level functions on data stored in an
+// AppKeyStore
 type AppKeyService struct {
 	Store *AppKeyStore
 }
 
+// NewAppKeyService allocates a new app key store.  The arguments are passed
+// through to NewAppKeyService
 func NewAppKeyService(backend StoreBackend, links *appkeypb.Links) *AppKeyService {
 	return &AppKeyService{
 		Store: NewAppKeyStore(backend, links),
 	}
 }
 
+// Guarantee AppKeyService implements needed interfaces
 var _ keyservice.ManagerService = &AppKeyService{}
 var _ keyservice.SigningService = &AppKeyService{}
 
+// AddApp adds an app to the data store, including it in the application index
 func (s *AppKeyService) AddApp(req *appkeypb.AddAppRequest, logger kslog.KsLogger) (*appkeypb.AddAppResponse, error) {
 	if req.App == 0 {
 		logger.Errorf("Attempted to add app %d", req.App)
@@ -284,6 +298,8 @@ func (s *AppKeyService) AddApp(req *appkeypb.AddAppRequest, logger kslog.KsLogge
 	return &appkeypb.AddAppResponse{}, nil
 }
 
+// RemoveApp removes an application from the store, removing all its keys and
+// its reference in the application index
 func (s *AppKeyService) RemoveApp(req *appkeypb.RemoveAppRequest, logger kslog.KsLogger) (*appkeypb.RemoveAppResponse, error) {
 	if req.App == 0 {
 		logger.Errorf("Attempted to add app %d", req.App)
@@ -347,6 +363,8 @@ func (s *AppKeyService) RemoveApp(req *appkeypb.RemoveAppRequest, logger kslog.K
 	return &appkeypb.RemoveAppResponse{}, nil
 }
 
+// GetApp loads an application description from the store.  This includes an
+// index of keys for the application.
 func (s *AppKeyService) GetApp(req *appkeypb.GetAppRequest, logger kslog.KsLogger) (*appkeypb.App, error) {
 	app, _, err := s.Store.GetApp(req.App)
 	if err != nil {
@@ -356,6 +374,7 @@ func (s *AppKeyService) GetApp(req *appkeypb.GetAppRequest, logger kslog.KsLogge
 	return app, err
 }
 
+// ListApps loads the application index for the data store
 func (s *AppKeyService) ListApps(req *appkeypb.ListAppsRequest, logger kslog.KsLogger) (*appkeypb.AppIndex, error) {
 	index, _, err := s.Store.GetAppIndex()
 	if err != nil {
@@ -365,6 +384,7 @@ func (s *AppKeyService) ListApps(req *appkeypb.ListAppsRequest, logger kslog.KsL
 	return index, err
 }
 
+// AddKey adds a key to the data store and updates an application to reference it.
 func (s *AppKeyService) AddKey(req *appkeypb.AddKeyRequest, logger kslog.KsLogger) (*appkeypb.AddKeyResponse, error) {
 	if len(req.Keys) == 0 {
 		logger.Logf("No keys to add")
@@ -414,6 +434,7 @@ func (s *AppKeyService) AddKey(req *appkeypb.AddKeyRequest, logger kslog.KsLogge
 	return &appkeypb.AddKeyResponse{}, nil
 }
 
+// RemoveKey removes a key from the data store and its reference to an application.
 func (s *AppKeyService) RemoveKey(req *appkeypb.RemoveKeyRequest, logger kslog.KsLogger) (*appkeypb.RemoveKeyResponse, error) {
 	for _, fingerprint := range req.Fingerprints {
 		_, err := s.Store.DeleteKey(req.App, fingerprint)
@@ -443,6 +464,9 @@ func (s *AppKeyService) RemoveKey(req *appkeypb.RemoveKeyRequest, logger kslog.K
 	return &appkeypb.RemoveKeyResponse{}, nil
 }
 
+// anyKeyFromApp fetches a valid key for a specified app.  This is useful
+// when a key operation needs to be performed and any valid key
+// may be used.
 func (s *AppKeyService) anyKeyFromApp(app *appkeypb.App, logger kslog.KsLogger) (*rsa.PrivateKey, string, error) {
 	var key []byte
 	var fingerprint string
@@ -470,6 +494,8 @@ func (s *AppKeyService) anyKeyFromApp(app *appkeypb.App, logger kslog.KsLogger) 
 	return rsaKey, fingerprint, nil
 }
 
+// validateIssClaim checks that the `iss` (issuer) claim of a JWT is a string
+// representation of the application id.
 func validateIssClaim(app uint64, iss string) error {
 	issAsInt, err := strconv.ParseUint(iss, 10, 64)
 	if err != nil {
@@ -481,6 +507,10 @@ func validateIssClaim(app uint64, iss string) error {
 	return nil
 }
 
+// validateExpNbfClaims checks the `exp` (expires) and `nbf` (not before)
+// claims of a JWT.  `exp` must be in the future and `nbf` must be after
+// `exp`.  `nbf` must also be either in the feature or within a reasonable
+// margin of now in the past (5 seconds ago).
 func validateExpNbfClaims(exp, nbf, now time.Time) error {
 	if !exp.After(now) {
 		return InvalidClaims("`exp` indicates claims are already expired")
@@ -496,6 +526,8 @@ func validateExpNbfClaims(exp, nbf, now time.Time) error {
 	return nil
 }
 
+// pbValToStr converts a structpb.Value to a string.  The structpb.Value
+// must actctually be a StringValue
 func pbValToStr(v *structpb.Value) (string, bool) {
 	stringVal, ok := v.Kind.(*structpb.Value_StringValue)
 	if !ok {
@@ -504,6 +536,8 @@ func pbValToStr(v *structpb.Value) (string, bool) {
 	return stringVal.StringValue, true
 }
 
+// pbValToNum converts a astructpb.Value to a float64.  The structpb.Value
+// must actually be a NumberValue.
 func pbValToNum(v *structpb.Value) (float64, bool) {
 	numVal, ok := v.Kind.(*structpb.Value_NumberValue)
 	if !ok {
@@ -512,6 +546,9 @@ func pbValToNum(v *structpb.Value) (float64, bool) {
 	return numVal.NumberValue, true
 }
 
+// pbValToTime converts a astructpb.Value to a time.Time.  The structpb.Value
+// must be a NumberValue and represents the number of senconds since
+// 1970-01-01T00:00:00Z
 func pbValToTime(v *structpb.Value) (time.Time, bool) {
 	numTime, ok := pbValToNum(v)
 	if !ok {
@@ -520,6 +557,8 @@ func pbValToTime(v *structpb.Value) (time.Time, bool) {
 	return timeutils.FloatToTime(numTime), true
 }
 
+// validateClaims checks the claims in a `appkeypb.SignJwtRequest` to make sure
+// all values are sane and secure
 func validateClaims(req *appkeypb.SignJwtRequest, now time.Time) error {
 	issVal := req.Claims.Fields["iss"]
 	if issVal == nil {
@@ -558,6 +597,7 @@ func validateClaims(req *appkeypb.SignJwtRequest, now time.Time) error {
 	return nil
 }
 
+// SignJwt loads a key for a specified app and signs the provided claims
 func (s *AppKeyService) SignJwt(req *appkeypb.SignJwtRequest, logger kslog.KsLogger) (*appkeypb.SignJwtResponse, error) {
 	if req.Algorithm != "RS256" {
 		return nil, UnsupportedSignatureAlgo(req.Algorithm)
