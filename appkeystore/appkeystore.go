@@ -1,3 +1,5 @@
+// Manage data in an application key store backed by a message store
+// and generate JWT
 package appkeystore
 
 import (
@@ -21,16 +23,21 @@ import (
 	"github.com/jtacoma/uritemplates"
 )
 
+// StoreBackend is the interface that must be implemented by a storage
+// system to be used by AppKeyStore.
 type StoreBackend interface {
 	messagestore.BlobStore
 	messagestore.MessageStore
 }
 
+// AppKeyStore manages a list of applications and their keys
 type AppKeyStore struct {
-	StoreBackend
-	Links appkeypb.Links
+	StoreBackend                // Storage system
+	Links        appkeypb.Links // Definitions of paths in the store
 }
 
+// NewAppKeyStore allocates a new AppKeyStore.  Generally nil should be
+// passed for links, but a specific links may be provided.
 func NewAppKeyStore(backend StoreBackend, links *appkeypb.Links) *AppKeyStore {
 	if links == nil {
 		links = &appkeypb.DefaultLinks
@@ -41,6 +48,8 @@ func NewAppKeyStore(backend StoreBackend, links *appkeypb.Links) *AppKeyStore {
 	}
 }
 
+// InitDb initializes an empty database.  This must be called before
+// database use.
 func (s *AppKeyStore) InitDb(logger kslog.KsLogger) error {
 	var index appkeypb.AppIndex
 	_, err := s.PutAppIndex(&index)
@@ -50,7 +59,9 @@ func (s *AppKeyStore) InitDb(logger kslog.KsLogger) error {
 	return err
 }
 
-func (s *AppKeyStore) AppIndexName() (string, error) {
+// appIndexName gets the name of the applicatoin index within the
+// storage system
+func (s *AppKeyStore) appIndexName() (string, error) {
 	uritmpl, err := uritemplates.Parse(s.Links.AppIndex)
 	if err != nil {
 		return "", err
@@ -58,8 +69,9 @@ func (s *AppKeyStore) AppIndexName() (string, error) {
 	return uritmpl.Expand(map[string]interface{}{})
 }
 
+// GetAppIndex fetches the applicatoin index from storage
 func (s *AppKeyStore) GetAppIndex() (*appkeypb.AppIndex, *messagestore.CacheMeta, error) {
-	name, err := s.AppIndexName()
+	name, err := s.appIndexName()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -68,23 +80,27 @@ func (s *AppKeyStore) GetAppIndex() (*appkeypb.AppIndex, *messagestore.CacheMeta
 	return &index, meta, err
 }
 
+// PutAppIndex creates or replaces the appication index in storage
 func (s *AppKeyStore) PutAppIndex(index *appkeypb.AppIndex) (*messagestore.CacheMeta, error) {
-	name, err := s.AppIndexName()
+	name, err := s.appIndexName()
 	if err != nil {
 		return nil, err
 	}
 	return s.PutMessage(name, index)
 }
 
+// DeleteAppIndex removes the app index from storage
 func (s *AppKeyStore) DeleteAppIndex() (*messagestore.CacheMeta, error) {
-	name, err := s.AppIndexName()
+	name, err := s.appIndexName()
 	if err != nil {
 		return nil, err
 	}
 	return s.DeleteMessage(name)
 }
 
-func (s *AppKeyStore) AppName(appId uint64) (string, error) {
+// appName gets the name of the document describing an application within the
+// storage system
+func (s *AppKeyStore) appName(appId uint64) (string, error) {
 	uritmpl, err := uritemplates.Parse(s.Links.App)
 	if err != nil {
 		return "", err
@@ -92,8 +108,9 @@ func (s *AppKeyStore) AppName(appId uint64) (string, error) {
 	return uritmpl.Expand(map[string]interface{}{"AppId": appId})
 }
 
+// GetApp fetches the document describing an application from storage
 func (s *AppKeyStore) GetApp(appId uint64) (*appkeypb.App, *messagestore.CacheMeta, error) {
-	name, err := s.AppName(appId)
+	name, err := s.appName(appId)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -102,23 +119,27 @@ func (s *AppKeyStore) GetApp(appId uint64) (*appkeypb.App, *messagestore.CacheMe
 	return &app, meta, err
 }
 
+// PutApp creates or replaces the document describing an application in storage
 func (s *AppKeyStore) PutApp(app *appkeypb.App) (*messagestore.CacheMeta, error) {
-	name, err := s.AppName(app.Id)
+	name, err := s.appName(app.Id)
 	if err != nil {
 		return nil, err
 	}
 	return s.PutMessage(name, app)
 }
 
+// DeleteApp removes the document describing an application from storage
 func (s *AppKeyStore) DeleteApp(appId uint64) (*messagestore.CacheMeta, error) {
-	name, err := s.AppName(appId)
+	name, err := s.appName(appId)
 	if err != nil {
 		return nil, err
 	}
 	return s.DeleteMessage(name)
 }
 
-func (s *AppKeyStore) KeyName(appId uint64, fingerprint string) (string, error) {
+// keyName gets the name of an RSA key for a certain application within the
+// storage system
+func (s *AppKeyStore) keyName(appId uint64, fingerprint string) (string, error) {
 	uritmpl, err := uritemplates.Parse(s.Links.Key)
 	if err != nil {
 		return "", err
@@ -127,7 +148,7 @@ func (s *AppKeyStore) KeyName(appId uint64, fingerprint string) (string, error) 
 }
 
 func (s *AppKeyStore) GetKey(appId uint64, fingerprint string) ([]byte, *messagestore.CacheMeta, error) {
-	name, err := s.KeyName(appId, fingerprint)
+	name, err := s.keyName(appId, fingerprint)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -135,7 +156,7 @@ func (s *AppKeyStore) GetKey(appId uint64, fingerprint string) ([]byte, *message
 }
 
 func (s *AppKeyStore) PutKey(app uint64, fingerprint string, key []byte) (*messagestore.CacheMeta, error) {
-	name, err := s.KeyName(app, fingerprint)
+	name, err := s.keyName(app, fingerprint)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +164,7 @@ func (s *AppKeyStore) PutKey(app uint64, fingerprint string, key []byte) (*messa
 }
 
 func (s *AppKeyStore) DeleteKey(appId uint64, fingerprint string) (*messagestore.CacheMeta, error) {
-	name, err := s.KeyName(appId, fingerprint)
+	name, err := s.keyName(appId, fingerprint)
 	if err != nil {
 		return nil, err
 	}
