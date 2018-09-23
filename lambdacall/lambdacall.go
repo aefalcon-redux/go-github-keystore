@@ -1,6 +1,8 @@
 package lambdacall
 
 import (
+	"fmt"
+
 	"github.com/aefalcon/github-keystore-protobuf/go/appkeypb"
 	"github.com/aefalcon/go-github-keystore/kslog"
 	"github.com/aws/aws-sdk-go/service/lambda"
@@ -22,7 +24,11 @@ func CallPbLambda(svc *lambda.Lambda, funcName string, in, out proto.Message) er
 	if err != nil {
 		return err
 	}
-	return jsonpb.UnmarshalString(string(invokeOutput.Payload), out)
+	err = jsonpb.UnmarshalString(string(invokeOutput.Payload), out)
+	if err != nil {
+		return fmt.Errorf("Failed to unmarshal %s: %s", string(invokeOutput.Payload), err)
+	}
+	return nil
 }
 
 type LambdaSigningService struct {
