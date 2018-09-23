@@ -34,7 +34,7 @@ func TestInitDb(t *testing.T) {
 		TestLogger:  t,
 		FailOnError: false,
 	}
-	err := keyService.InitDb(&logger)
+	err := keyService.Store.InitDb(&logger)
 	if err != nil {
 		t.Fatalf("Failed to initialize database: %s", err)
 	}
@@ -45,7 +45,7 @@ func TestAddApp(t *testing.T) {
 	logger := kslog.KsTestLogger{
 		TestLogger: t,
 	}
-	err := keyService.InitDb(&logger)
+	err := keyService.Store.InitDb(&logger)
 	if err != nil {
 		t.Fatalf("Failed to initialize database: %s", err)
 	}
@@ -93,7 +93,7 @@ func TestRemoveApp(t *testing.T) {
 	logger := kslog.KsTestLogger{
 		TestLogger: t,
 	}
-	err := keyService.InitDb(&logger)
+	err := keyService.Store.InitDb(&logger)
 	if err != nil {
 		t.Fatalf("Failed to initialize database: %s", err)
 	}
@@ -150,7 +150,7 @@ func TestAddAppWithKey(t *testing.T) {
 	logger := kslog.KsTestLogger{
 		TestLogger: t,
 	}
-	err := keyService.InitDb(&logger)
+	err := keyService.Store.InitDb(&logger)
 	if err != nil {
 		t.Fatalf("Failed to initialize database: %s", err)
 	}
@@ -192,7 +192,7 @@ func TestAddAppWithKey(t *testing.T) {
 	}
 	appBack, err := keyService.GetApp(&getAppReq, &logger)
 	if err != nil {
-		t.Fatalf("Failed to get app document back: %s", err)
+		t.Fatalf("Failed to get app back: %s", err)
 	}
 	if len(appBack.Keys) == 0 {
 		t.Fatal("No key on app")
@@ -217,7 +217,7 @@ func TestSignJwt(t *testing.T) {
 	logger := kslog.KsTestLogger{
 		TestLogger: t,
 	}
-	err := keyService.InitDb(&logger)
+	err := keyService.Store.InitDb(&logger)
 	if err != nil {
 		t.Fatalf("Failed to initialize database: %s", err)
 	}
