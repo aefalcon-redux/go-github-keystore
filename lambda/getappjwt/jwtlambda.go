@@ -25,9 +25,9 @@ func (r *LambdaSignJwtRequest) UnmarshalJSON(data []byte) error {
 	return jsonpb.Unmarshal(dataReader, &r.SignJwtRequest)
 }
 
-func HandleRequest(store *appkeystore.AppKeyStore, ctx context.Context, req *LambdaSignJwtRequest) (string, error) {
+func HandleRequest(service *appkeystore.AppKeyService, ctx context.Context, req *LambdaSignJwtRequest) (string, error) {
 	logger := kslog.DefaultLogger{}
-	reply, err := store.SignJwt(&req.SignJwtRequest, logger)
+	reply, err := service.SignJwt(&req.SignJwtRequest, logger)
 	if err != nil {
 		return "", err
 	}
@@ -55,9 +55,9 @@ func main() {
 	docStore := messagestore.BlobMessageStore{
 		BlobStore: blobStore,
 	}
-	keyStore := appkeystore.NewAppKeyStore(&docStore, nil)
+	keyService := appkeystore.NewAppKeyService(&docStore, nil)
 	handleFunc := func(ctx context.Context, req *LambdaSignJwtRequest) (string, error) {
-		return HandleRequest(keyStore, ctx, req)
+		return HandleRequest(keyService, ctx, req)
 	}
 	lambda.Start(handleFunc)
 }

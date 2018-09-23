@@ -94,7 +94,7 @@ func (v *flagValues) Require(flags ...string) error {
 	return nil
 }
 
-func MakeStore(config *appkeypb.AppKeyManagerConfig, links *appkeypb.Links) (*appkeystore.AppKeyStore, error) {
+func MakeKeyService(config *appkeypb.AppKeyManagerConfig, links *appkeypb.Links) (*appkeystore.AppKeyService, error) {
 	if links == nil {
 		links = &appkeypb.DefaultLinks
 	}
@@ -105,8 +105,8 @@ func MakeStore(config *appkeypb.AppKeyManagerConfig, links *appkeypb.Links) (*ap
 	docStore := messagestore.BlobMessageStore{
 		BlobStore: blobStore,
 	}
-	store := appkeystore.NewAppKeyStore(&docStore, links)
-	return store, nil
+	service := appkeystore.NewAppKeyService(&docStore, links)
+	return service, nil
 }
 
 func GetConfig(flags *flagValues, logger kslog.KsLogger) (*appkeypb.AppKeyManagerConfig, error) {
@@ -181,12 +181,12 @@ func cmdInitDb(flagValues *flagValues, logger kslog.KsLogger) {
 		logger.Errorf("Failed to get configuration: %s", err)
 		os.Exit(1)
 	}
-	store, err := MakeStore(config, nil)
+	service, err := MakeKeyService(config, nil)
 	if err != nil {
 		logger.Errorf("Failed to make store: %s", err)
 		os.Exit(1)
 	}
-	err = store.InitDb(logger)
+	err = service.Store.InitDb(logger)
 	if err != nil {
 		logger.Errorf("Failed to initialize new database: %s", err)
 		os.Exit(1)
@@ -248,13 +248,13 @@ func cmdListApps(flagValues *flagValues, logger kslog.KsLogger) {
 		logger.Errorf("Failed to get configuration: %s", err)
 		os.Exit(1)
 	}
-	store, err := MakeStore(config, nil)
+	service, err := MakeKeyService(config, nil)
 	if err != nil {
 		logger.Errorf("Failed to make store: %s", err)
 		os.Exit(1)
 	}
 	req := appkeypb.ListAppsRequest{}
-	index, err := store.ListApps(&req, logger)
+	index, err := service.ListApps(&req, logger)
 	if err != nil {
 		logger.Errorf("Failed go get app index: %s", err)
 		os.Exit(1)
@@ -278,7 +278,7 @@ func cmdAddApp(flagValues *flagValues, logger kslog.KsLogger) {
 		logger.Errorf("Failed to get configuration: %s", err)
 		os.Exit(1)
 	}
-	store, err := MakeStore(config, nil)
+	service, err := MakeKeyService(config, nil)
 	if err != nil {
 		logger.Errorf("Failed to make store: %s", err)
 		os.Exit(1)
@@ -286,7 +286,7 @@ func cmdAddApp(flagValues *flagValues, logger kslog.KsLogger) {
 	req := appkeypb.AddAppRequest{
 		App: flagValues.App,
 	}
-	_, err = store.AddApp(&req, logger)
+	_, err = service.AddApp(&req, logger)
 	if err != nil {
 		logger.Errorf("Failed to create application %d: %s", flagValues.App, err)
 		os.Exit(1)
@@ -299,7 +299,7 @@ func cmdAddKey(flagValues *flagValues, logger kslog.KsLogger) {
 		logger.Errorf("Failed to get configuration: %s", err)
 		os.Exit(1)
 	}
-	store, err := MakeStore(config, nil)
+	service, err := MakeKeyService(config, nil)
 	if err != nil {
 		logger.Errorf("Failed to make store: %s", err)
 		os.Exit(1)
@@ -337,7 +337,7 @@ func cmdAddKey(flagValues *flagValues, logger kslog.KsLogger) {
 			},
 		},
 	}
-	_, err = store.AddKey(&req, logger)
+	_, err = service.AddKey(&req, logger)
 	if err != nil {
 		logger.Errorf("Failed to add key: %s", err)
 		os.Exit(1)
@@ -350,7 +350,7 @@ func cmdListKeys(flagValues *flagValues, logger kslog.KsLogger) {
 		logger.Errorf("Failed to get configuration: %s", err)
 		os.Exit(1)
 	}
-	store, err := MakeStore(config, nil)
+	service, err := MakeKeyService(config, nil)
 	if err != nil {
 		logger.Errorf("Failed to make store: %s", err)
 		os.Exit(1)
@@ -358,7 +358,7 @@ func cmdListKeys(flagValues *flagValues, logger kslog.KsLogger) {
 	req := appkeypb.GetAppRequest{
 		App: flagValues.App,
 	}
-	app, err := store.GetApp(&req, logger)
+	app, err := service.GetApp(&req, logger)
 	if err != nil {
 		logger.Errorf("Failed to get app %d: %s", flagValues.App, err)
 		os.Exit(1)
@@ -378,7 +378,7 @@ func cmdRemoveKey(flagValues *flagValues, logger kslog.KsLogger) {
 		logger.Errorf("Failed to get configuration: %s", err)
 		os.Exit(1)
 	}
-	store, err := MakeStore(config, nil)
+	service, err := MakeKeyService(config, nil)
 	if err != nil {
 		logger.Errorf("Failed to make store: %s", err)
 		os.Exit(1)
@@ -387,7 +387,7 @@ func cmdRemoveKey(flagValues *flagValues, logger kslog.KsLogger) {
 		App:          flagValues.App,
 		Fingerprints: []string{flagValues.Key},
 	}
-	_, err = store.RemoveKey(&req, logger)
+	_, err = service.RemoveKey(&req, logger)
 	if err != nil {
 		logger.Errorf("Failed to remove key: %s", err)
 		os.Exit(1)
@@ -400,7 +400,7 @@ func cmdRemoveApp(flagValues *flagValues, logger kslog.KsLogger) {
 		logger.Errorf("Failed to get configuration: %s", err)
 		os.Exit(1)
 	}
-	store, err := MakeStore(config, nil)
+	service, err := MakeKeyService(config, nil)
 	if err != nil {
 		logger.Errorf("Failed to make store: %s", err)
 		os.Exit(1)
@@ -408,7 +408,7 @@ func cmdRemoveApp(flagValues *flagValues, logger kslog.KsLogger) {
 	req := appkeypb.RemoveAppRequest{
 		App: flagValues.App,
 	}
-	_, err = store.RemoveApp(&req, logger)
+	_, err = service.RemoveApp(&req, logger)
 	if err != nil {
 		logger.Errorf("Failed to remove application %d", flagValues.App)
 		os.Exit(1)

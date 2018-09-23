@@ -25,20 +25,20 @@ import (
 	structpb "github.com/golang/protobuf/ptypes/struct"
 )
 
-func NewMemKeyStore() *appkeystore.AppKeyStore {
+func NewTestKeyService() *appkeystore.AppKeyService {
 	blobStore := messagestore.NewMemBlobStore()
 	docStore := messagestore.BlobMessageStore{
 		BlobStore: blobStore,
 	}
-	return appkeystore.NewAppKeyStore(&docStore, nil)
+	return appkeystore.NewAppKeyService(&docStore, nil)
 }
 
 func TestSignJwt(t *testing.T) {
-	keyStore := NewMemKeyStore()
+	keyService := NewTestKeyService()
 	logger := kslog.KsTestLogger{
 		TestLogger: t,
 	}
-	err := keyStore.InitDb(&logger)
+	err := keyService.Store.InitDb(&logger)
 	if err != nil {
 		t.Fatalf("Failed to initialize database: %s", err)
 	}
@@ -71,7 +71,7 @@ func TestSignJwt(t *testing.T) {
 			},
 		},
 	}
-	_, err = keyStore.AddApp(&addReq, &logger)
+	_, err = keyService.AddApp(&addReq, &logger)
 	if err != nil {
 		t.Fatalf("Failed to add app %d: %s", appId, err)
 	}
@@ -105,7 +105,7 @@ func TestSignJwt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to unmarshal protobuf json into lambda request object: %s", err)
 	}
-	resp, err := HandleRequest(keyStore, context.Background(), &lambdaReq)
+	resp, err := HandleRequest(keyService, context.Background(), &lambdaReq)
 	if err != nil {
 		t.Fatalf("handler failure: %s", err)
 	}
