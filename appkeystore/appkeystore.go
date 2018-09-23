@@ -70,15 +70,12 @@ type AppKeyStore struct {
 	Links appkeypb.Links
 }
 
-var _ keyservice.ManagerService = &AppKeyStore{}
-var _ keyservice.SigningService = &AppKeyStore{}
-
-func NewAppKeyStore(store StoreBackend, links *appkeypb.Links) *AppKeyStore {
+func NewAppKeyStore(backend StoreBackend, links *appkeypb.Links) *AppKeyStore {
 	if links == nil {
 		links = &appkeypb.DefaultLinks
 	}
 	return &AppKeyStore{
-		StoreBackend: store,
+		StoreBackend: backend,
 		Links:        *links,
 	}
 }
@@ -226,7 +223,20 @@ func (s *AppKeyStore) DeleteKeyMetaDoc(appId uint64, fingerprint string) (*messa
 	return s.DeleteBlob(docName)
 }
 
-func (s *AppKeyStore) AddApp(req *appkeypb.AddAppRequest, logger kslog.KsLogger) (*appkeypb.AddAppResponse, error) {
+type AppKeyService struct {
+	*AppKeyStore
+}
+
+func NewAppKeyService(backend StoreBackend, links *appkeypb.Links) *AppKeyService {
+	return &AppKeyService{
+		AppKeyStore: NewAppKeyStore(backend, links),
+	}
+}
+
+var _ keyservice.ManagerService = &AppKeyService{}
+var _ keyservice.SigningService = &AppKeyService{}
+
+func (s *AppKeyService) AddApp(req *appkeypb.AddAppRequest, logger kslog.KsLogger) (*appkeypb.AddAppResponse, error) {
 	if req.App == 0 {
 		logger.Errorf("Attempted to add app %d", req.App)
 		return nil, UnallowedAppId(req.App)
@@ -292,7 +302,7 @@ func (s *AppKeyStore) AddApp(req *appkeypb.AddAppRequest, logger kslog.KsLogger)
 	return &appkeypb.AddAppResponse{}, nil
 }
 
-func (s *AppKeyStore) RemoveApp(req *appkeypb.RemoveAppRequest, logger kslog.KsLogger) (*appkeypb.RemoveAppResponse, error) {
+func (s *AppKeyService) RemoveApp(req *appkeypb.RemoveAppRequest, logger kslog.KsLogger) (*appkeypb.RemoveAppResponse, error) {
 	if req.App == 0 {
 		logger.Errorf("Attempted to add app %d", req.App)
 		return nil, UnallowedAppId(req.App)
@@ -355,7 +365,7 @@ func (s *AppKeyStore) RemoveApp(req *appkeypb.RemoveAppRequest, logger kslog.KsL
 	return &appkeypb.RemoveAppResponse{}, nil
 }
 
-func (s *AppKeyStore) GetApp(req *appkeypb.GetAppRequest, logger kslog.KsLogger) (*appkeypb.App, error) {
+func (s *AppKeyService) GetApp(req *appkeypb.GetAppRequest, logger kslog.KsLogger) (*appkeypb.App, error) {
 	app, _, err := s.GetAppDoc(req.App)
 	if err != nil {
 		logger.Logf("Failed to get app %d: %s", req.App, err)
@@ -364,7 +374,7 @@ func (s *AppKeyStore) GetApp(req *appkeypb.GetAppRequest, logger kslog.KsLogger)
 	return app, err
 }
 
-func (s *AppKeyStore) ListApps(req *appkeypb.ListAppsRequest, logger kslog.KsLogger) (*appkeypb.AppIndex, error) {
+func (s *AppKeyService) ListApps(req *appkeypb.ListAppsRequest, logger kslog.KsLogger) (*appkeypb.AppIndex, error) {
 	index, _, err := s.GetAppIndexDoc()
 	if err != nil {
 		logger.Logf("Failed to get application index: %s", err)
@@ -373,7 +383,7 @@ func (s *AppKeyStore) ListApps(req *appkeypb.ListAppsRequest, logger kslog.KsLog
 	return index, err
 }
 
-func (s *AppKeyStore) AddKey(req *appkeypb.AddKeyRequest, logger kslog.KsLogger) (*appkeypb.AddKeyResponse, error) {
+func (s *AppKeyService) AddKey(req *appkeypb.AddKeyRequest, logger kslog.KsLogger) (*appkeypb.AddKeyResponse, error) {
 	if len(req.Keys) == 0 {
 		logger.Logf("No keys to add")
 		return &appkeypb.AddKeyResponse{}, nil
@@ -422,7 +432,7 @@ func (s *AppKeyStore) AddKey(req *appkeypb.AddKeyRequest, logger kslog.KsLogger)
 	return &appkeypb.AddKeyResponse{}, nil
 }
 
-func (s *AppKeyStore) RemoveKey(req *appkeypb.RemoveKeyRequest, logger kslog.KsLogger) (*appkeypb.RemoveKeyResponse, error) {
+func (s *AppKeyService) RemoveKey(req *appkeypb.RemoveKeyRequest, logger kslog.KsLogger) (*appkeypb.RemoveKeyResponse, error) {
 	for _, fingerprint := range req.Fingerprints {
 		_, err := s.DeleteKeyDoc(req.App, fingerprint)
 		if err != nil {
@@ -451,7 +461,7 @@ func (s *AppKeyStore) RemoveKey(req *appkeypb.RemoveKeyRequest, logger kslog.KsL
 	return &appkeypb.RemoveKeyResponse{}, nil
 }
 
-func (s *AppKeyStore) anyKeyFromApp(app *appkeypb.App, logger kslog.KsLogger) (*rsa.PrivateKey, string, error) {
+func (s *AppKeyService) anyKeyFromApp(app *appkeypb.App, logger kslog.KsLogger) (*rsa.PrivateKey, string, error) {
 	var key []byte
 	var fingerprint string
 	for _, keyEntry := range app.Keys {
@@ -566,7 +576,7 @@ func (s *AppKeyStore) validateClaims(req *appkeypb.SignJwtRequest, now time.Time
 	return nil
 }
 
-func (s *AppKeyStore) SignJwt(req *appkeypb.SignJwtRequest, logger kslog.KsLogger) (*appkeypb.SignJwtResponse, error) {
+func (s *AppKeyService) SignJwt(req *appkeypb.SignJwtRequest, logger kslog.KsLogger) (*appkeypb.SignJwtResponse, error) {
 	if req.Algorithm != "RS256" {
 		return nil, UnsupportedSignatureAlgo(req.Algorithm)
 	}

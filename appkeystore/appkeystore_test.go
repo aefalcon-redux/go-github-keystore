@@ -24,32 +24,28 @@ import (
 var TestBucket string
 var TestRegion string
 
-func NewMemKeyStore() *AppKeyStore {
-	blobStore := messagestore.NewMemBlobStore()
-	docStore := messagestore.BlobMessageStore{
-		BlobStore: blobStore,
-	}
-	return NewAppKeyStore(&docStore, nil)
+func NewTestKeyService() *AppKeyService {
+	return NewAppKeyService(messagestore.NewMemMessageStore(), nil)
 }
 
 func TestInitDb(t *testing.T) {
-	keyStore := NewMemKeyStore()
+	keyService := NewTestKeyService()
 	logger := kslog.KsTestLogger{
 		TestLogger:  t,
 		FailOnError: false,
 	}
-	err := keyStore.InitDb(&logger)
+	err := keyService.InitDb(&logger)
 	if err != nil {
 		t.Fatalf("Failed to initialize database: %s", err)
 	}
 }
 
 func TestAddApp(t *testing.T) {
-	keyStore := NewMemKeyStore()
+	keyService := NewTestKeyService()
 	logger := kslog.KsTestLogger{
 		TestLogger: t,
 	}
-	err := keyStore.InitDb(&logger)
+	err := keyService.InitDb(&logger)
 	if err != nil {
 		t.Fatalf("Failed to initialize database: %s", err)
 	}
@@ -57,7 +53,7 @@ func TestAddApp(t *testing.T) {
 		req := appkeypb.AddAppRequest{
 			App: appId,
 		}
-		_, err = keyStore.AddApp(&req, &logger)
+		_, err = keyService.AddApp(&req, &logger)
 		if err != nil && shouldPass {
 			t.Errorf("Failed to add app: %s", err)
 		} else if err != nil && !shouldPass {
@@ -93,11 +89,11 @@ func TestAddApp(t *testing.T) {
 }
 
 func TestRemoveApp(t *testing.T) {
-	keyStore := NewMemKeyStore()
+	keyService := NewTestKeyService()
 	logger := kslog.KsTestLogger{
 		TestLogger: t,
 	}
-	err := keyStore.InitDb(&logger)
+	err := keyService.InitDb(&logger)
 	if err != nil {
 		t.Fatalf("Failed to initialize database: %s", err)
 	}
@@ -105,7 +101,7 @@ func TestRemoveApp(t *testing.T) {
 		addReq := appkeypb.AddAppRequest{
 			App: uint64(i),
 		}
-		_, err := keyStore.AddApp(&addReq, &logger)
+		_, err := keyService.AddApp(&addReq, &logger)
 		if err != nil {
 			t.Fatalf("Failed to add app %d: %s", i, err)
 		}
@@ -114,7 +110,7 @@ func TestRemoveApp(t *testing.T) {
 		remReq := appkeypb.RemoveAppRequest{
 			App: appId,
 		}
-		_, err = keyStore.RemoveApp(&remReq, &logger)
+		_, err = keyService.RemoveApp(&remReq, &logger)
 		if err != nil && shouldPass {
 			t.Errorf("Failed to add app: %s", err)
 		} else if err != nil && !shouldPass {
@@ -150,11 +146,11 @@ func TestRemoveApp(t *testing.T) {
 }
 
 func TestAddAppWithKey(t *testing.T) {
-	keyStore := NewMemKeyStore()
+	keyService := NewTestKeyService()
 	logger := kslog.KsTestLogger{
 		TestLogger: t,
 	}
-	err := keyStore.InitDb(&logger)
+	err := keyService.InitDb(&logger)
 	if err != nil {
 		t.Fatalf("Failed to initialize database: %s", err)
 	}
@@ -187,14 +183,14 @@ func TestAddAppWithKey(t *testing.T) {
 			},
 		},
 	}
-	_, err = keyStore.AddApp(&addReq, &logger)
+	_, err = keyService.AddApp(&addReq, &logger)
 	if err != nil {
 		t.Fatalf("Failed to add app %d: %s", appId, err)
 	}
 	getAppReq := appkeypb.GetAppRequest{
 		App: uint64(appId),
 	}
-	appBack, err := keyStore.GetApp(&getAppReq, &logger)
+	appBack, err := keyService.GetApp(&getAppReq, &logger)
 	if err != nil {
 		t.Fatalf("Failed to get app document back: %s", err)
 	}
@@ -217,11 +213,11 @@ func TestAddAppWithKey(t *testing.T) {
 }
 
 func TestSignJwt(t *testing.T) {
-	keyStore := NewMemKeyStore()
+	keyService := NewTestKeyService()
 	logger := kslog.KsTestLogger{
 		TestLogger: t,
 	}
-	err := keyStore.InitDb(&logger)
+	err := keyService.InitDb(&logger)
 	if err != nil {
 		t.Fatalf("Failed to initialize database: %s", err)
 	}
@@ -254,7 +250,7 @@ func TestSignJwt(t *testing.T) {
 			},
 		},
 	}
-	_, err = keyStore.AddApp(&addReq, &logger)
+	_, err = keyService.AddApp(&addReq, &logger)
 	if err != nil {
 		t.Fatalf("Failed to add app %d: %s", appId, err)
 	}
@@ -277,7 +273,7 @@ func TestSignJwt(t *testing.T) {
 			},
 		},
 	}
-	jwtResp, err := keyStore.SignJwt(&signReq, logger)
+	jwtResp, err := keyService.SignJwt(&signReq, logger)
 	if err != nil {
 		t.Fatalf("Failed to sign JWT: %s", err)
 	}

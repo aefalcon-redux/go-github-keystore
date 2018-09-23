@@ -1,39 +1,45 @@
 package messagestore
 
 type MemStore struct {
-	Docs map[string][]byte
+	Blobs map[string][]byte
 }
 
-func NewMemBlobStore() BlobStore {
+func NewMemBlobStore() *MemStore {
 	return &MemStore{
-		Docs: make(map[string][]byte),
+		Blobs: make(map[string][]byte),
+	}
+}
+
+func NewMemMessageStore() *BlobMessageStore {
+	return &BlobMessageStore{
+		BlobStore: NewMemBlobStore(),
 	}
 }
 
 var _ BlobStore = &MemStore{}
 
 func (s *MemStore) GetBlob(name string) ([]byte, *CacheMeta, error) {
-	storeDoc, found := s.Docs[name]
+	storeBlob, found := s.Blobs[name]
 	if !found {
 		return nil, nil, NoSuchResource(name)
 	}
-	returnDoc := make([]byte, len(storeDoc))
-	copy(returnDoc, storeDoc)
-	return returnDoc, nil, nil
+	blobCopy := make([]byte, len(storeBlob))
+	copy(blobCopy, storeBlob)
+	return blobCopy, nil, nil
 }
 
 func (s *MemStore) PutBlob(name string, content []byte) (*CacheMeta, error) {
 	storeCopy := make([]byte, len(content))
 	copy(storeCopy, content)
-	s.Docs[name] = storeCopy
+	s.Blobs[name] = storeCopy
 	return nil, nil
 }
 
 func (s *MemStore) DeleteBlob(name string) (*CacheMeta, error) {
-	_, found := s.Docs[name]
+	_, found := s.Blobs[name]
 	if !found {
 		return nil, NoSuchResource(name)
 	}
-	delete(s.Docs, name)
+	delete(s.Blobs, name)
 	return nil, nil
 }
