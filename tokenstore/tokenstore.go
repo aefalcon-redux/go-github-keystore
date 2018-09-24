@@ -228,35 +228,31 @@ func (s *InstallTokenService) getNewAppToken(app uint64, logger kslog.KsLogger) 
 	return appTokenMsg, nil
 }
 
-func (s *InstallTokenService) GetInstallToken(req *tokenpb.GetInstallTokenRequest, logger kslog.KsLogger) (*tokenpb.GetInstallTokenResponse, error) {
-	if req.App == 0 {
-		logger.Errorf("Attempted to add app %d", req.App)
-		return nil, UnallowedAppId(req.App)
-	}
-	installTokenMsg, _, err := s.TokenMessageStore.GetInstallToken(req.App, req.Install)
-	if err == nil && s.installTokenIsValid(installTokenMsg, logger) {
-		resp := tokenpb.GetInstallTokenResponse{
-			Token: installTokenMsg,
-		}
-		return &resp, nil
-	}
-	appTokenMsg, _, err := s.GetAppToken(req.App)
+// getOrCreateAppToken will return a cached valid application token, or create
+// a new applicationt token and add it to the cache
+func (s *InstallTokenService) getOrCreateAppToken(app uint64, logger kslog.KsLogger) (*tokenpb.AppToken, error) {
+	appToken, _, err := s.GetAppToken(app)
 	if err != nil {
-		logger.Errorf("Failed to get app %d token from store: %s", req.App, err)
-		appTokenMsg = nil
+		logger.Errorf("Failed to get app %d token from store: %s", app, err)
+		appToken = nil
 	}
-	if appTokenMsg != nil && !s.appTokenIsValid(appTokenMsg, logger) {
-		appTokenMsg = nil
+	if appToken != nil && !s.appTokenIsValid(appToken, logger) {
+		appToken = nil
 	}
-	if appTokenMsg == nil {
-		appTokenMsg, err = s.getNewAppToken(req.App, logger)
+	if appToken == nil {
+		appToken, err = s.getNewAppToken(app, logger)
 		if err != nil {
 			return nil, err
 		}
 	}
-	installToken, expiration, err := s.InstallTokenProvider(req.Install, string(appTokenMsg.Token))
+	return appToken, nil
+}
+
+// createInstallToken provisions a new install token and stores it in the cache
+func (s *InstallTokenService) createInstallToken(app, install uint64, appToken string, logger kslog.KsLogger) (*tokenpb.InstallToken, error) {
+	installToken, expiration, err := s.InstallTokenProvider(install, appToken)
 	if err != nil {
-		logger.Errorf("Failed to get new token for app %d install %d: %s", req.App, req.Install, err)
+		logger.Errorf("Failed to get new token for app %d install %d: %s", app, install, err)
 		return nil, err
 	}
 	pbexp, err := ptypes.TimestampProto(expiration)
@@ -264,18 +260,44 @@ func (s *InstallTokenService) GetInstallToken(req *tokenpb.GetInstallTokenReques
 		logger.Errorf("Failed to convert expiration %v to pb: %s", expiration, err)
 		return nil, err
 	}
-	installTokenMsg = &tokenpb.InstallToken{
-		App:        req.App,
-		Install:    req.Install,
+	installTokenMsg := tokenpb.InstallToken{
+		App:        app,
+		Install:    install,
 		Token:      installToken,
 		Expiration: pbexp,
 	}
-	_, err = s.PutInstallToken(installTokenMsg)
+	_, err = s.PutInstallToken(&installTokenMsg)
 	if err != nil {
-		logger.Errorf("Failed to put token for app %d install %d: %s", req.App, req.Install, err)
+		logger.Errorf("Failed to put token for app %d install %d: %s", app, install, err)
+	}
+	return &installTokenMsg, nil
+}
+
+// GetInstallToken provices a valid install token for the requested installation.
+// If a valid cached token is found, it will be returned, otherewise a new token
+// will be be provisioned.
+func (s *InstallTokenService) GetInstallToken(req *tokenpb.GetInstallTokenRequest, logger kslog.KsLogger) (*tokenpb.GetInstallTokenResponse, error) {
+	if req.App == 0 {
+		logger.Errorf("Attempted to add app %d", req.App)
+		return nil, UnallowedAppId(req.App)
+	}
+	installToken, _, err := s.TokenMessageStore.GetInstallToken(req.App, req.Install)
+	if err == nil && s.installTokenIsValid(installToken, logger) {
+		resp := tokenpb.GetInstallTokenResponse{
+			Token: installToken,
+		}
+		return &resp, nil
+	}
+	appToken, err := s.getOrCreateAppToken(req.App, logger)
+	if err != nil {
+		return nil, err
+	}
+	installToken, err = s.createInstallToken(req.App, req.Install, appToken.Token, logger)
+	if err != nil {
+		return nil, err
 	}
 	resp := tokenpb.GetInstallTokenResponse{
-		Token: installTokenMsg,
+		Token: installToken,
 	}
 	return &resp, nil
 }
