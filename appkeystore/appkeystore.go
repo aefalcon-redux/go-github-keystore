@@ -231,6 +231,48 @@ func NewAppKeyService(backend StoreBackend, links *appkeypb.Links) *AppKeyServic
 var _ keyservice.ManagerService = &AppKeyService{}
 var _ keyservice.SigningService = &AppKeyService{}
 
+// addKeysToApp adds a list of keys to an appkeypb.AppKey key index
+func addKeysToApp(app *appkeypb.App, keys []*appkeypb.AppKey) error {
+	app.Keys = make(map[string]*appkeypb.AppKeyIndexEntry, len(keys))
+	for _, key := range keys {
+		rsaKey, err := keyutils.ParsePrivateKey(key.Key)
+		if err != nil {
+			return err
+		}
+		fingerprint, err := keyutils.KeyFingerprint(rsaKey)
+		if err != nil {
+			return err
+		}
+		if key.Meta.Fingerprint != fingerprint {
+			return &FingerprintMismatch{
+				Given:   key.Meta.Fingerprint,
+				Derived: fingerprint,
+			}
+		}
+		app.Keys[fingerprint] = &appkeypb.AppKeyIndexEntry{
+			Meta: key.Meta,
+		}
+	}
+	return nil
+}
+
+// storeKeys puts keys for an app in the key store
+func (s *AppKeyService) storeKeys(app uint64, keys []*appkeypb.AppKey, logger kslog.KsLogger) error {
+	for _, key := range keys {
+		_, err := s.Store.PutKey(app, key.Meta.Fingerprint, key.Key)
+		if err != nil {
+			logger.Logf("Failed to put key in store: %s", err)
+			return err
+		}
+		_, err = s.Store.PutKeyMeta(key.Meta)
+		if err != nil {
+			logger.Logf("Failed to put key metadata in store: %s", err)
+			return err
+		}
+	}
+	return nil
+}
+
 // AddApp adds an app to the data store, including it in the application index
 func (s *AppKeyService) AddApp(req *appkeypb.AddAppRequest, logger kslog.KsLogger) (*appkeypb.AddAppResponse, error) {
 	if req.App == 0 {
@@ -254,37 +296,13 @@ func (s *AppKeyService) AddApp(req *appkeypb.AddAppRequest, logger kslog.KsLogge
 		Id: req.App,
 	}
 	if len(req.Keys) > 0 {
-		app.Keys = make(map[string]*appkeypb.AppKeyIndexEntry, len(req.Keys))
-		for _, reqKey := range req.Keys {
-			rsaKey, err := keyutils.ParsePrivateKey(reqKey.Key)
-			if err != nil {
-				return nil, err
-			}
-			fingerprint, err := keyutils.KeyFingerprint(rsaKey)
-			if err != nil {
-				return nil, err
-			}
-			if reqKey.Meta.Fingerprint != fingerprint {
-				return nil, &FingerprintMismatch{
-					Given:   reqKey.Meta.Fingerprint,
-					Derived: fingerprint,
-				}
-			}
-			app.Keys[fingerprint] = &appkeypb.AppKeyIndexEntry{
-				Meta: reqKey.Meta,
-			}
+		err = addKeysToApp(&app, req.Keys)
+		if err != nil {
+			return nil, err
 		}
-		for _, reqKey := range req.Keys {
-			_, err = s.Store.PutKey(req.App, reqKey.Meta.Fingerprint, reqKey.Key)
-			if err != nil {
-				logger.Logf("Failed to put key in store: %s", err)
-				return nil, err
-			}
-			_, err = s.Store.PutKeyMeta(reqKey.Meta)
-			if err != nil {
-				logger.Logf("Failed to put key metadata in store: %s", err)
-				return nil, err
-			}
+		err = s.storeKeys(req.App, req.Keys, logger)
+		if err != nil {
+			return nil, err
 		}
 	}
 	_, err = s.Store.PutApp(&app)
@@ -296,6 +314,28 @@ func (s *AppKeyService) AddApp(req *appkeypb.AddAppRequest, logger kslog.KsLogge
 		return nil, err
 	}
 	return &appkeypb.AddAppResponse{}, nil
+}
+
+// removeKeys removes keys in an applications key index from the store
+func (s *AppKeyService) removeKeys(app uint64, keyIdx map[string]*appkeypb.AppKeyIndexEntry, logger kslog.KsLogger) bool {
+	removeKeysOk := true
+	for _, key := range keyIdx {
+		_, err := s.Store.DeleteKeyMeta(app, key.Meta.Fingerprint)
+		if err != nil {
+			logger.Logf("Failed to remove key %s metadata", key.Meta.Fingerprint)
+			removeKeysOk = false
+		} else {
+			logger.Logf("Deleted key %s metadata", key.Meta.Fingerprint)
+		}
+		_, err = s.Store.DeleteKey(app, key.Meta.Fingerprint)
+		if err != nil {
+			logger.Logf("Failed to remove key %s", key.Meta.Fingerprint)
+			removeKeysOk = false
+		} else {
+			logger.Logf("Deleted key %s", key.Meta.Fingerprint)
+		}
+	}
+	return removeKeysOk
 }
 
 // RemoveApp removes an application from the store, removing all its keys and
@@ -334,28 +374,11 @@ func (s *AppKeyService) RemoveApp(req *appkeypb.RemoveAppRequest, logger kslog.K
 		return nil, err
 	}
 	logger.Logf("Deleted application %d", req.App)
-	removeKeysOk := true
 	if len(app.Keys) == 0 {
 		logger.Logf("no keys to delete")
 		return &appkeypb.RemoveAppResponse{}, nil
 	}
-	for _, key := range app.Keys {
-		_, err = s.Store.DeleteKeyMeta(req.App, key.Meta.Fingerprint)
-		if err != nil {
-			logger.Logf("Failed to remove key %s metadata", key.Meta.Fingerprint)
-			removeKeysOk = false
-		} else {
-			logger.Logf("Deleted key %s metadata", key.Meta.Fingerprint)
-		}
-		_, err = s.Store.DeleteKey(req.App, key.Meta.Fingerprint)
-		if err != nil {
-			logger.Logf("Failed to remove key %s", key.Meta.Fingerprint)
-			removeKeysOk = false
-		} else {
-			logger.Logf("Deleted key %s", key.Meta.Fingerprint)
-		}
-	}
-	if !removeKeysOk {
+	if !s.removeKeys(req.App, app.Keys, logger) {
 		return nil, fmt.Errorf("Failed to remove keys")
 	} else {
 		logger.Logf("Deleted all keys")
@@ -411,20 +434,9 @@ func (s *AppKeyService) AddKey(req *appkeypb.AddKeyRequest, logger kslog.KsLogge
 		}
 		keysToAdd = append(keysToAdd, key)
 	}
-	for _, key := range keysToAdd {
-		logger.Logf("Adding key %s", key.Meta.Fingerprint)
-		_, err = s.Store.PutKey(req.App, key.Meta.Fingerprint, key.Key)
-		if err != nil {
-			logger.Logf("Failed to put key in store: %s", err)
-			return nil, err
-		}
-		logger.Logf("Added key %s", key.Meta.Fingerprint)
-		_, err = s.Store.PutKeyMeta(key.Meta)
-		if err != nil {
-			logger.Logf("Failed to put key metadata in store: %s", err)
-			return nil, err
-		}
-		logger.Logf("Added key metadata for %s", key.Meta.Fingerprint)
+	err = s.storeKeys(req.App, keysToAdd, logger)
+	if err == nil {
+		return nil, err
 	}
 	_, err = s.Store.PutApp(app)
 	if err != nil {
