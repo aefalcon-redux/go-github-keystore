@@ -140,6 +140,67 @@ func (s *InstallTokenService) appTokenIsValid(tokenMsg *tokenpb.AppToken, logger
 	return true
 }
 
+// parsedJsonNumToFloat converts a value of unknown type from parsed json into
+// a float64
+func parsedJsonNumToFloat(v interface{}) (float64, error) {
+	switch tv := v.(type) {
+	case json.Number:
+		fv, err := tv.Float64()
+		if err != nil {
+			return 0, err
+		}
+		return fv, nil
+	case float64:
+		return tv, nil
+	case int64:
+		return float64(tv), nil
+	default:
+		return 0, fmt.Errorf("Unexpected type %T for expiration time", tv)
+	}
+}
+
+// getTokenExp parses a JWT and reterns the expiration
+func getTokenExp(token string, logger kslog.KsLogger) (time.Time, error) {
+	tokenParts := strings.Split(token, ".")
+	if nTokenParts := len(tokenParts); nTokenParts != 3 {
+		err := ReceivedInvalidToken{
+			Token:   token,
+			Message: fmt.Sprintf("Token has %d parts instead of 3", nTokenParts),
+		}
+		logger.Errorf("Received invalid application token: %s", err)
+		return time.Time{}, &err
+	}
+	claimsJson := make([]byte, base64.RawURLEncoding.DecodedLen(len(tokenParts[1])))
+	_, err := base64.RawURLEncoding.Decode(claimsJson, []byte(tokenParts[1]))
+	if err != nil {
+		err := ReceivedInvalidToken{
+			Token:   token,
+			Message: fmt.Sprintf("Failed to decode claims base64: %s", err),
+		}
+		logger.Errorf("Received invalid application token: %s", err)
+		return time.Time{}, &err
+	}
+	var claims map[string]interface{}
+	err = json.Unmarshal(claimsJson, &claims)
+	if err != nil {
+		logger.Errorf("Failed to parse claims: %s", err)
+		return time.Time{}, err
+	}
+	expVal := claims["exp"]
+	if expVal == nil {
+		err = fmt.Errorf("No `exp` in claims %s", claimsJson)
+		logger.Error(err)
+		return time.Time{}, err
+	}
+	expFloat, err := parsedJsonNumToFloat(expVal)
+	if err != nil {
+		return time.Time{}, err
+	}
+	expiration := timeutils.FloatToTime(expFloat)
+	return expiration, nil
+}
+
+// getNewAppToken requests a new JWT and caches the token
 func (s *InstallTokenService) getNewAppToken(app uint64, logger kslog.KsLogger) (*tokenpb.AppToken, error) {
 	now := time.Now().UTC()
 	signReq := appkeypb.SignJwtRequest{
@@ -165,52 +226,7 @@ func (s *InstallTokenService) getNewAppToken(app uint64, logger kslog.KsLogger) 
 		logger.Errorf("Failed to get new token for app %d: %s", app, err)
 		return nil, err
 	}
-	tokenParts := strings.Split(signResp.Jwt, ".")
-	if nTokenParts := len(tokenParts); nTokenParts != 3 {
-		err := ReceivedInvalidToken{
-			Token:   signResp.Jwt,
-			Message: fmt.Sprintf("Token has %d parts instead of 3", nTokenParts),
-		}
-		logger.Errorf("Received invalid application token: %s", err)
-		return nil, &err
-	}
-	claimsJson := make([]byte, base64.RawURLEncoding.DecodedLen(len(tokenParts[1])))
-	_, err = base64.RawURLEncoding.Decode(claimsJson, []byte(tokenParts[1]))
-	if err != nil {
-		err := ReceivedInvalidToken{
-			Token:   signResp.Jwt,
-			Message: fmt.Sprintf("Failed to decode claims base64: %s", err),
-		}
-		logger.Errorf("Received invalid application token: %s", err)
-		return nil, &err
-	}
-	var claims map[string]interface{}
-	err = json.Unmarshal(claimsJson, &claims)
-	if err != nil {
-		logger.Errorf("Failed to parse claims: %s", err)
-		return nil, err
-	}
-	expVal := claims["exp"]
-	if expVal == nil {
-		err = fmt.Errorf("No `exp` in claims %s", claimsJson)
-		logger.Error(err)
-		return nil, err
-	}
-	var expFloat float64
-	switch tExp := expVal.(type) {
-	case json.Number:
-		expFloat, err = tExp.Float64()
-		if err != nil {
-			return nil, err
-		}
-	case float64:
-		expFloat = tExp
-	case int64:
-		expFloat = float64(tExp)
-	default:
-		return nil, fmt.Errorf("Unexpected type %T for expiration time", tExp)
-	}
-	expiration := timeutils.FloatToTime(expFloat)
+	expiration, err := getTokenExp(signResp.Jwt, logger)
 	pbexp, err := ptypes.TimestampProto(expiration)
 	if err != nil {
 		logger.Errorf("Failed to convert expiration %v of new app token to pb time", expiration, err)
